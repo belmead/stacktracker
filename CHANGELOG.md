@@ -50,6 +50,10 @@ All notable changes to Stack Tracker are documented in this file.
   - Prioritize WooCommerce Store API and Shopify public product feeds.
   - Restrict target list to US-facing direct storefront vendors.
   - Treat contact-to-order and non-storefront domains as excluded.
+- Vendor onboarding verification log expanded with latest batch outcomes:
+  - Additional Woo/Shopify/Wix storefront URLs confirmed.
+  - Clinic-based, closed, and domain-for-sale providers explicitly marked excluded in docs.
+  - Follow-up list documented for unresolved vendor URLs.
 
 ### Verified
 - Passing checks under Node 20:

@@ -39,6 +39,33 @@
     - UWA Elite Peptides
     - Amino Asylum (`aminoasylumllc.com` appears brand-correct but storefront/API signals are inconsistent)
 
+## Late Session Update (2026-02-14)
+- Additional vendor URL batch validated and classified.
+- Newly accepted storefront/API vendors:
+  - `peptiatlas.com`, `purerawz.co`, `peptidecrafters.com`, `biolongevitylabs.com`, `lotilabs.com`,
+    `nexaph.com`, `erospeptides.com`, `biopepz.net`, `purepeps.com`, `hkroids.com`,
+    `reta-peptide.com` (Shopify), `swisschems.is`
+- Explicitly excluded in this pass:
+  - `next-health.com/peptide-therapy` (clinic)
+  - `platinumcryo.com` (clinic)
+  - `supplementsbyhazel.com` (clinic)
+  - `science.bio` (closed notice)
+  - `championpeptide.com` (domain-for-sale)
+  - plus previously excluded: `peptidegurus.com`, `peptidesforsale.com`, `tydes.net`
+- New unresolved/needs corrected URL:
+  - The Naughty Needle
+  - Peptide Haven
+  - Uther
+  - Injectify
+  - PurePeptides (`purepeptides.co.uk`)
+  - Alpha-Gen
+  - Peptide Worldwide
+  - Amplified Amino (missing URL)
+
+## Reminder For Next Session
+- Product/UI task requested by user:
+  - Update nav dropdown to include **Categories** so users can browse categories before choosing a specific peptide.
+
 ## What Was Changed In This Session
 - Setup/docs and env guidance updated for Supabase/Vercel flow.
 - Added one-time schema drift recovery: `DB_BOOTSTRAP_RESET=true npm run db:bootstrap`.

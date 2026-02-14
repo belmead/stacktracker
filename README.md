@@ -222,3 +222,47 @@ node scripts/finnrick-vendor-audit.js
 - Amino Lair
 - UWA Elite Peptides
 - Amino Asylum (`https://aminoasylumllc.com/` appears to be the brand site but API/storefront behavior is inconsistent; keep as manual-check)
+
+### Latest batch decisions (2026-02-14, late update)
+
+Accepted in current scope (direct storefront and/or API-usable):
+- `https://peptiatlas.com/` (Woo + Store API)
+- `https://purerawz.co/` (Woo + Store API)
+- `https://peptidecrafters.com/` (Woo + Store API)
+- `https://biolongevitylabs.com/` (Woo + Store API)
+- `https://lotilabs.com/` (Woo + Store API)
+- `https://nexaph.com/` (Woo + Store API)
+- `https://erospeptides.com/` (Woo + Store API)
+- `https://www.biopepz.net/` (Wix storefront)
+- `https://purepeps.com/` (Woo + Store API)
+- `https://hkroids.com/` (Woo + Store API)
+- `https://reta-peptide.com/` (Shopify + `products.json`)
+- `https://swisschems.is/` (Woo + Store API)
+
+Excluded:
+- `https://www.next-health.com/peptide-therapy` (clinic-based)
+- `https://www.platinumcryo.com/` (clinic-based)
+- `https://www.supplementsbyhazel.com/` (clinic-based)
+- `https://science.bio/` (site indicates permanently closed)
+- `https://championpeptide.com` (domain-for-sale, not storefront)
+- `https://peptidegurus.com/` (contact-to-order)
+- `https://peptidesforsale.com/` (not a storefront)
+- `https://tydes.net/` (not a peptide vendor)
+
+Needs corrected URL or manual check:
+- The Naughty Needle
+- Peptide Haven
+- Uther
+- Injectify
+- PurePeptides (`purepeptides.co.uk` fetch failed)
+- Alpha-Gen
+- Peptide Worldwide
+- Amplified Amino (URL missing)
+- Precision Peptide Co
+- Amino Lair
+- UWA Elite Peptides
+
+### Product reminder (UI)
+
+Planned nav improvement:
+- Add categories into the main nav dropdown so users can browse by category first, then drill into peptides.
