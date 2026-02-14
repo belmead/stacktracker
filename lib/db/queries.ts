@@ -95,7 +95,13 @@ export async function getCategorySummaries(): Promise<CategorySummary[]> {
       count(distinct c.id)::int as compound_count
     from categories cat
     left join compound_category_map ccm on ccm.category_id = cat.id
-    left join compounds c on c.id = ccm.compound_id and c.is_active = true
+    left join compounds c on c.id = ccm.compound_id
+      and c.is_active = true
+      and exists (
+        select 1
+        from compound_variants cv
+        where cv.compound_id = c.id and cv.is_active = true
+      )
     group by cat.id, cat.slug, cat.name
     having count(distinct c.id) > 0
     order by cat.name asc
@@ -111,7 +117,13 @@ export async function getCategoryBySlug(slug: string): Promise<CategorySummary |
       count(distinct c.id)::int as compound_count
     from categories cat
     left join compound_category_map ccm on ccm.category_id = cat.id
-    left join compounds c on c.id = ccm.compound_id and c.is_active = true
+    left join compounds c on c.id = ccm.compound_id
+      and c.is_active = true
+      and exists (
+        select 1
+        from compound_variants cv
+        where cv.compound_id = c.id and cv.is_active = true
+      )
     where cat.slug = ${slug}
     group by cat.id, cat.slug, cat.name
     limit 1
@@ -137,7 +149,14 @@ export async function getCompoundsForCategorySlug(slug: string): Promise<Categor
     from compounds c
     inner join compound_category_map ccm on ccm.compound_id = c.id
     inner join categories cat on cat.id = ccm.category_id
-    where cat.slug = ${slug} and c.is_active = true
+    where
+      cat.slug = ${slug}
+      and c.is_active = true
+      and exists (
+        select 1
+        from compound_variants cv
+        where cv.compound_id = c.id and cv.is_active = true
+      )
     group by c.id, c.slug, c.name, c.description
     order by c.name asc
   `;

@@ -177,9 +177,17 @@ npm run test
 - Supabase schema drift cleanup completed:
   - Removed legacy empty tables (`peptides`, `products`, `product_ingredients`, `price_history`, `finnrick_scores`).
   - Added one-primary-category guard index on `compound_category_map`.
+- Bootstrap schema now includes the one-primary-category partial unique index for fresh DBs:
+  - `compound_category_map_one_primary_per_compound` in `sql/schema.sql`.
 - Curated category taxonomy import is operational:
   - `npm run db:import-categories` now seeds/matches compounds and applies category mappings.
   - Latest run applied `48`/`48` assignments with `0` unresolved.
+- Category browsing query behavior is now aligned with selector behavior:
+  - `/categories` and `/categories/[slug]` include only compounds with active variants.
+- Admin category editor save flow now handles network/fetch failures with explicit error feedback.
+- Regression coverage added for category logic:
+  - `tests/unit/category-queries.test.ts`
+  - `tests/unit/categories-page.test.ts`
 - Remaining launch blockers are infrastructure setup tasks:
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars

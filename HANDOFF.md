@@ -8,6 +8,29 @@
 - Most recent vendor run: `ddf3aedb-8af1-43a4-a6a8-ef3a0716c75c` (`pagesTotal=10`, `pagesSuccess=9`, `pagesFailed=1`).
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
 
+## Continuation Update (2026-02-14)
+- DB/app category consistency was re-verified against Supabase:
+  - `categories=22`, `active compounds=48`, `compound_category_map rows=50`
+  - `compoundsWithMappings=48`, `compoundsWithPrimary=48`
+  - `compoundsWithMultiplePrimary=0`
+  - orphaned mapping rows to missing compounds/categories = `0`
+- Targeted QA was completed for:
+  - `/vendors/[slug]` (validated vendor identity, active offers table, and local-time "Last updated" label rendering)
+  - `/admin/categories` (unauth redirect behavior, API `401` unauth guard, auth flow, successful save, and `admin_audit_log` write)
+- Highest-impact fixes implemented:
+  - Added one-primary-category partial unique index to bootstrap schema (`sql/schema.sql`) so fresh environments enforce the same invariant.
+  - Category browsing queries now only include compounds with active variants, matching selector behavior:
+    - `getCategorySummaries`
+    - `getCategoryBySlug`
+    - `getCompoundsForCategorySlug`
+  - Admin category editor save flow now handles fetch/network failures gracefully.
+- Added regression coverage:
+  - `tests/unit/category-queries.test.ts`
+  - `tests/unit/categories-page.test.ts`
+- Post-change checks passed:
+  - `npm run test`
+  - `npm run typecheck`
+
 ## Final Update (2026-02-14)
 - New user-facing vendor catalog route is implemented:
   - `/vendors/[slug]`
@@ -166,15 +189,22 @@
 - Newly seeded compounds may not yet appear in public selectors until they have active variants/offers (current selector filter requires variant presence).
 
 ## Immediate Next Steps
-1. Start app on a known free port:
-   - `npm run dev -- -p 3001` (or another free port)
-2. Re-run ingestion once after pull/restart:
+1. Re-run ingestion to increase active variant/offer coverage:
    - `npm run job:vendors`
    - `npm run job:finnrick`
    - `npm run job:review-ai`
-3. Confirm BPC detail page behavior and admin auth flow (checklist below).
-4. Set `OPENAI_API_KEY` in `.env.local` and verify alias decisions move from review to AI match/skip outcomes.
-5. Triage only true ambiguities in review queue (blends/uncertain cases), not CTA noise.
+2. Improve extraction coverage for `eliteresearchusa.com` (current known weak target) by adding/validating deeper catalog targets.
+3. Re-check public category UX after ingestion:
+   - `/categories`
+   - `/categories/[slug]`
+   - confirm only variant-backed compounds appear and counts are sensible.
+4. Continue vendor onboarding from unresolved URL queue:
+   - Precision Peptide Co
+   - Amino Lair
+   - UWA Elite Peptides
+   - Peptide Worldwide
+   - Amplified Amino
+5. Triage review queue ambiguities after AI pass (focus on true blend/alias ambiguity, ignore CTA/noise).
 
 ## Verification Checklist (Mapped To Your Commentary)
 1. Homepage metric scope
@@ -211,8 +241,30 @@
 - Expect only partial vendor coverage until Elite Research target extraction is improved.
 
 ## If Starting A New Thread
-Share this file plus `PRD.md`, then include:
-- Current dev port in use.
-- Whether latest `job:vendors` and `job:finnrick` were run after pulling code.
-- Whether `/peptides/bpc-157` currently shows active non-blend offers.
-- Whether admin local magic-link log appears in terminal.
+Use this copy/paste prompt:
+
+```
+Continue from /Users/belmead/Documents/stacktracker on branch codex/mvp-scaffold.
+
+Start by reading:
+- /Users/belmead/Documents/stacktracker/HANDOFF.md
+- /Users/belmead/Documents/stacktracker/README.md
+- /Users/belmead/Documents/stacktracker/PRD.md
+- /Users/belmead/Documents/stacktracker/CHANGELOG.md
+
+Current state to assume:
+1. Vendor catalog pages exist at /vendors/[slug] with local-time last-updated label.
+2. Admin category editor exists at /admin/categories backed by POST /api/admin/categories.
+3. Category browsing exists at /categories and /categories/[slug] and now only includes compounds with active variants.
+4. DB bootstrap schema includes one-primary-category partial unique index on compound_category_map.
+5. Category consistency is verified (48/48 compounds mapped with one primary each).
+6. Regression tests exist for category query guards and categories page behavior.
+
+Pick up by:
+1. Running ingestion jobs and summarizing coverage deltas:
+   - npm run job:vendors
+   - npm run job:finnrick
+   - npm run job:review-ai
+2. Prioritizing next highest-impact fixes from resulting gaps.
+3. Implementing the fixes and updating docs/tests as needed.
+```

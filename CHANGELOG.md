@@ -52,6 +52,9 @@ All notable changes to Stack Tracker are documented in this file.
 - Category import script:
   - `scripts/import-compound-categories.ts` plus `npm run db:import-categories` for curated category upsert/mapping with multi-category support.
   - Import flow now seeds missing compounds from the curated taxonomy list before mapping.
+- Regression tests for category behavior:
+  - `tests/unit/category-queries.test.ts` validates active-variant guards in category DB queries.
+  - `tests/unit/categories-page.test.ts` validates `/categories` metric fallback/preservation and category link rendering.
 
 ### Changed
 - Floating nav category selector now routes to category pages before compound selection.
@@ -72,6 +75,10 @@ All notable changes to Stack Tracker are documented in this file.
   - Additional Woo/Shopify/Wix storefront URLs confirmed.
   - Clinic-based, closed, and domain-for-sale providers explicitly marked excluded in docs.
   - Follow-up list documented for unresolved vendor URLs.
+- Bootstrap schema now explicitly creates the one-primary-category partial unique index:
+  - `compound_category_map_one_primary_per_compound`.
+- Category browsing query behavior now aligns with selector behavior by requiring active variants.
+- Admin category editor save workflow now catches network/fetch failures and surfaces an explicit row-level error.
 
 ### Verified
 - Passing checks under Node 20:

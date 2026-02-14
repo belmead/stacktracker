@@ -138,35 +138,43 @@ export function CategoryEditor({ categories, compounds }: CategoryEditorProps) {
       error: false
     });
 
-    const response = await fetch("/api/admin/categories", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        compoundId: compound.id,
-        categoryIds: row.categoryIds,
-        primaryCategoryId: nextPrimaryCategory(row.categoryIds, row.primaryCategoryId)
-      })
-    });
+    try {
+      const response = await fetch("/api/admin/categories", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          compoundId: compound.id,
+          categoryIds: row.categoryIds,
+          primaryCategoryId: nextPrimaryCategory(row.categoryIds, row.primaryCategoryId)
+        })
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        setRow(compound.id, {
+          saving: false,
+          status: payload?.error ?? "Could not save categories.",
+          error: true
+        });
+        return;
+      }
+
       setRow(compound.id, {
         saving: false,
-        status: payload?.error ?? "Could not save categories.",
+        baselineCategoryIds: row.categoryIds,
+        baselinePrimaryCategoryId: nextPrimaryCategory(row.categoryIds, row.primaryCategoryId),
+        status: "Saved.",
+        error: false
+      });
+    } catch (error) {
+      setRow(compound.id, {
+        saving: false,
+        status: error instanceof Error ? error.message : "Could not save categories.",
         error: true
       });
-      return;
     }
-
-    setRow(compound.id, {
-      saving: false,
-      baselineCategoryIds: row.categoryIds,
-      baselinePrimaryCategoryId: nextPrimaryCategory(row.categoryIds, row.primaryCategoryId),
-      status: "Saved.",
-      error: false
-    });
   };
 
   return (

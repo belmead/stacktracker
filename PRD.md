@@ -17,6 +17,7 @@ MVP goals:
   - Homepage with top-five peptide cards.
   - Peptide detail pages with formulation/size selection, trend chart, and paginated vendor table.
   - Vendor detail pages listing all active vendor offerings with last-updated timestamp.
+  - Category browsing pages list compounds that have active variants (not taxonomy-only placeholders).
 - Metric-aware display (formulation-aware defaults).
 - Vendor scraping pipeline with safe mode and AI fallback task queue.
 - Finnrick rating ingestion with `N/A` fallback.
@@ -162,6 +163,7 @@ Internal jobs:
 - Node runtime target: `>=20`.
 - Secure session cookies and magic-link flow.
 - Auditable admin actions.
+- Enforce one primary category per compound at the DB level.
 - SEO support via sitemap + robots routes.
 - Structured scrape event logging and run summaries.
 
@@ -178,6 +180,9 @@ Internal jobs:
 - Code quality gates are passing under Node 20.
 - Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
 - Category taxonomy importer is implemented and currently applies `48/48` curated assignments with multi-category support.
+- Category browsing queries are aligned with selector rules (active variants required).
+- Bootstrap schema includes one-primary-category partial unique index on `compound_category_map`.
+- Regression tests cover category query guards and categories page metric/link behavior.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
 - Remaining prerequisite for first full ingestion cycle is infrastructure:
   - Working Postgres endpoint (Supabase recommended).

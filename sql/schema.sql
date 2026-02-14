@@ -282,6 +282,9 @@ create index if not exists idx_scrape_runs_job_type_started on scrape_runs(job_t
 create index if not exists idx_scrape_events_run on scrape_events(scrape_run_id);
 create index if not exists idx_scrape_requests_status on scrape_requests(status, created_at);
 create index if not exists idx_ai_agent_tasks_status on ai_agent_tasks(status, created_at);
+create unique index if not exists compound_category_map_one_primary_per_compound
+  on compound_category_map(compound_id)
+  where is_primary = true;
 
 insert into formulations (code, display_name)
 values
