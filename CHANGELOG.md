@@ -37,12 +37,19 @@ All notable changes to Stack Tracker are documented in this file.
   - Product requirements in `PRD.md`.
   - Handoff/restart instructions in `HANDOFF.md`.
   - Updated runbook in `README.md`.
+  - Vendor onboarding notes for US-direct-storefront scope and platform/API verification.
+- Vendor audit utility script:
+  - `scripts/finnrick-vendor-audit.js` for Finnrick vendor extraction, filtering, website discovery, platform detection, and API probing.
 
 ### Changed
 - Improved environment handling for local and production-first setup:
   - Added `DATABASE_PREPARE` toggle.
   - Documented Supabase/Vercel-first deployment path.
 - Hardened parsing logic for capsule plural detection (`capsules`).
+- Discovery strategy is now explicitly API-first with a documented vendor onboarding flow:
+  - Prioritize WooCommerce Store API and Shopify public product feeds.
+  - Restrict target list to US-facing direct storefront vendors.
+  - Treat contact-to-order and non-storefront domains as excluded.
 
 ### Verified
 - Passing checks under Node 20:

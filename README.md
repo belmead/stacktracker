@@ -19,6 +19,8 @@ Primary docs:
   - Admin and internal job routes from the PRD.
 - Scraping:
   - 6-hour vendor scrape flow with normalization and dedupe/update behavior.
+  - API-first discovery using WooCommerce Store API / Shopify products API when available.
+  - Standards-first extraction from `schema.org` JSON-LD (`Product`/`Offer`) when present.
   - 24-hour Finnrick sync with `N/A` fallback.
   - Safe-mode robots policy handling.
   - AI-agent fallback task queue for blocked/empty pages.
@@ -65,19 +67,27 @@ cp .env.example .env.local
 - `ADMIN_EMAIL=stacktracker@proton.me`
 - `ADMIN_AUTH_SECRET`
 - `CRON_SECRET`
-- `ALERT_TO_EMAIL=stacktracker@proton.me`
 
 Optional while domain is not purchased yet:
 
-- Leave `ALERT_FROM_EMAIL` unset for local testing.
-- Login route will still return a `devMagicLink` in non-production.
+- For local development only, leave `RESEND_API_KEY`, `ALERT_FROM_EMAIL`, and `ALERT_TO_EMAIL` unset.
+- In local non-production, submitting admin login prints the magic link in server logs.
 - Keep `SCRAPER_USER_AGENT` quoted if it contains spaces/parentheses.
 - Do not `source .env.local` manually; npm scripts load it automatically.
+- Set `OPENAI_API_KEY` to enable AI-based product/alias classification.
+- Optional: set `OPENAI_MODEL` (default: `gpt-5-mini`).
+- Optional: set `FIRECRAWL_API_KEY` to enable managed rendering/extraction fallback.
 
 4. Bootstrap DB schema and seed:
 
 ```bash
 npm run db:bootstrap
+```
+
+If you are reusing an existing database with stale tables from older iterations, run a one-time reset bootstrap:
+
+```bash
+DB_BOOTSTRAP_RESET=true npm run db:bootstrap
 ```
 
 5. Run app:
@@ -93,7 +103,10 @@ Manual local run:
 ```bash
 npm run job:vendors
 npm run job:finnrick
+npm run job:review-ai
 ```
+
+`job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 
 ## Production-first setup (Supabase + Vercel)
 
@@ -103,7 +116,12 @@ npm run job:finnrick
    - `DATABASE_SSL_MODE=require`
    - `DATABASE_PREPARE=false`
    - `ADMIN_EMAIL`, `ADMIN_AUTH_SECRET`, `CRON_SECRET`
-   - `ALERT_TO_EMAIL`, `RESEND_API_KEY`, `ALERT_FROM_EMAIL` (once domain/sender is verified)
+   - `OPENAI_API_KEY` (required for AI-first product classification)
+   - `OPENAI_MODEL` (optional override; default `gpt-5-mini`)
+   - `FIRECRAWL_API_KEY` (optional managed scrape fallback for difficult pages)
+   - `FIRECRAWL_API_BASE_URL` (optional override; default `https://api.firecrawl.dev/v2`)
+   - `RESEND_API_KEY`, `ALERT_FROM_EMAIL`, `ALERT_TO_EMAIL` (required for production admin magic-link email delivery)
+   - `NEXT_PUBLIC_APP_URL` (production base URL)
 3. In your local `.env.local`, mirror the same values.
 4. Run `npm run db:bootstrap` once against the target DB.
 5. Deploy to Vercel (cron jobs are defined in `vercel.json`).
@@ -145,3 +163,62 @@ npm run test
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars
   - First DB bootstrap + ingestion runs
+
+## Vendor onboarding status (2026-02-14)
+
+Scope has been narrowed to:
+- US-focused vendors
+- Direct online storefronts only (no "contact to order")
+- API-first ingestion wherever possible
+
+### Audit tooling
+
+- Script: `scripts/finnrick-vendor-audit.js`
+- Purpose: pull Finnrick vendor names, exclude already-covered vendors, skip likely wholesale/China names heuristically, discover/evaluate websites, classify platform/API.
+- Outputs:
+  - `/tmp/finnrick-vendor-audit.json`
+  - `/tmp/finnrick-vendor-audit.csv`
+
+Run:
+
+```bash
+node scripts/finnrick-vendor-audit.js
+```
+
+### Verified vendor URLs and platform/API
+
+- WooCommerce + public Store API:
+  - `https://peptidology.co/`
+  - `https://eternalpeptides.com/`
+  - `https://www.puretestedpeptides.com/`
+  - `https://verifiedpeptides.com/`
+  - `https://planetpeptide.com/`
+  - `https://simplepeptide.com/`
+  - `https://bulkpeptidesupply.com/`
+  - `https://coastalpeptides.com/`
+  - `https://myoasislabs.com/` (from `oasispeptides.com`)
+  - `https://peptilabresearch.com/`
+  - `https://evolvebiopep.com/`
+  - `https://purapeptides.com/`
+  - `https://nusciencepeptides.com/`
+  - `https://peptides4research.com/`
+  - `https://atomiklabz.com/` (homepage can be Cloudflare-blocked, Store API still accessible)
+- Custom app (no standard Woo/Shopify public endpoint):
+  - `https://eliteresearchusa.com/`
+- BigCommerce:
+  - `https://limitlesslifenootropics.com/`
+- Wix:
+  - `https://www.simplyrichards.com/`
+
+### Explicitly ignored/excluded in current scope
+
+- `https://peptidegurus.com/` (contact-to-order)
+- `https://peptidesforsale.com/` (not a storefront)
+- `https://tydes.net/` (not a peptide vendor)
+
+### Still needs corrected URL or confirmation
+
+- Precision Peptide Co
+- Amino Lair
+- UWA Elite Peptides
+- Amino Asylum (`https://aminoasylumllc.com/` appears to be the brand site but API/storefront behavior is inconsistent; keep as manual-check)

@@ -58,9 +58,11 @@ export interface CompoundResolution {
   status: ResolutionStatus;
   aliasNormalized: string;
   reason: string;
+  skipReview?: boolean;
 }
 
 export interface HomeCardRow {
+  vendorId: string;
   vendorName: string;
   vendorUrl: string;
   metricPrice: number | null;

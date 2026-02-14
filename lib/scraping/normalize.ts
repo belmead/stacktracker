@@ -22,16 +22,6 @@ const FORMULATION_RULES: Array<{ code: string; label: string; patterns: RegExp[]
   { code: "gel", label: "Gel", patterns: [/\bgel\b/] }
 ];
 
-const COMPOUND_PATTERNS: Array<{ alias: string; regex: RegExp }> = [
-  { alias: "BPC-157", regex: /\bbpc\s*-?\s*157\b/i },
-  { alias: "Retatrutide", regex: /\bretatrutide\b|\bglp\s*-?\s*3\b|\ber\s*-?\s*rt\b|\b[a-z]?\s*-?rt\b/i },
-  { alias: "CJC-1295", regex: /\bcjc\s*-?\s*1295\b/i },
-  { alias: "Ipamorelin", regex: /\bipamorelin\b/i },
-  { alias: "Tesamorelin", regex: /\btesamorelin\b/i },
-  { alias: "Semaglutide", regex: /\bsemaglutide\b/i },
-  { alias: "Tirzepatide", regex: /\btirzepatide\b/i }
-];
-
 function normalizeWhitespace(input: string): string {
   return input.replace(/\s+/g, " ").trim();
 }
@@ -49,21 +39,7 @@ export function detectFormulation(productName: string): { code: string; label: s
 }
 
 export function inferCompoundRawName(productName: string): string {
-  for (const pattern of COMPOUND_PATTERNS) {
-    if (pattern.regex.test(productName)) {
-      return pattern.alias;
-    }
-  }
-
-  const cleaned = productName.replace(/\([^)]*\)/g, " ");
-  const splitters = [" - ", " | ", ": ", " by "];
-  for (const splitter of splitters) {
-    if (cleaned.includes(splitter)) {
-      return normalizeWhitespace(cleaned.split(splitter)[0]);
-    }
-  }
-
-  return normalizeWhitespace(cleaned.split(",")[0]).slice(0, 120);
+  return normalizeWhitespace(productName).slice(0, 120);
 }
 
 function parsePackageQuantity(text: string): { quantity: number | null; unit: string | null } {
@@ -189,14 +165,15 @@ export function buildExtractedOffer(input: {
   payload?: Record<string, unknown>;
   availabilityText?: string;
 }): ExtractedOffer {
-  const parsed = parseProductName(input.productName);
+  const normalizedProductName = normalizeWhitespace(input.productName);
+  const parsed = parseProductName(normalizedProductName);
 
   return {
     vendorPageId: input.vendorPageId,
     vendorId: input.vendorId,
     pageUrl: input.pageUrl,
     productUrl: input.productUrl,
-    productName: normalizeWhitespace(input.productName),
+    productName: normalizedProductName,
     compoundRawName: parsed.compoundRawName,
     formulationRaw: parsed.formulationCode,
     sizeRaw: parsed.displaySizeLabel,

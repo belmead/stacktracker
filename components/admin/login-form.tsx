@@ -21,18 +21,15 @@ export function AdminLoginForm() {
         body: JSON.stringify({ email })
       });
 
-      const payload = (await response.json().catch(() => ({}))) as { devMagicLink?: string; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; devHint?: string; error?: string };
 
       if (!response.ok) {
         setStatus(payload.error ?? "Unable to send link.");
         return;
       }
 
-      if (payload.devMagicLink) {
-        setStatus(`Link generated (dev): ${payload.devMagicLink}`);
-      } else {
-        setStatus("If your email is authorized, a magic link has been sent.");
-      }
+      const base = payload.message ?? "If your email is authorized, a magic link has been sent.";
+      setStatus(payload.devHint ? `${base} ${payload.devHint}` : base);
     } finally {
       setLoading(false);
     }
@@ -47,7 +44,6 @@ export function AdminLoginForm() {
         required
         value={email}
         onChange={(event) => setEmail(event.target.value)}
-        placeholder="stacktracker@proton.me"
       />
       <button type="submit" className="primary-button" disabled={loading}>
         {loading ? "Sending..." : "Send magic link"}

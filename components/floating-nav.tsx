@@ -15,19 +15,36 @@ interface FloatingNavProps {
   compounds: CompoundOption[];
   currentMetric: MetricType;
   currentSlug?: string;
+  metricOptions?: MetricType[];
 }
 
-const METRIC_OPTIONS: Array<{ value: MetricType; label: string }> = [
-  { value: "price_per_mg", label: "Per mg" },
-  { value: "price_per_ml", label: "Per mL" },
-  { value: "price_per_vial", label: "Per vial" },
-  { value: "price_per_unit", label: "Per unit" }
-];
+const DEFAULT_METRIC_OPTIONS: MetricType[] = ["price_per_mg", "price_per_ml", "price_per_vial", "price_per_unit"];
 
-export function FloatingNav({ compounds, currentMetric, currentSlug }: FloatingNavProps) {
+const METRIC_LABELS: Record<MetricType, string> = {
+  price_per_mg: "Per mg",
+  price_per_ml: "Per mL",
+  price_per_vial: "Per vial",
+  price_per_unit: "Per unit"
+};
+
+function normalizeMetricOptions(values: MetricType[] | undefined): MetricType[] {
+  const source = values && values.length > 0 ? values : DEFAULT_METRIC_OPTIONS;
+  return Array.from(new Set(source));
+}
+
+export function FloatingNav({ compounds, currentMetric, currentSlug, metricOptions }: FloatingNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const visibleMetrics = useMemo(
+    () => normalizeMetricOptions(metricOptions).map((value) => ({ value, label: METRIC_LABELS[value] })),
+    [metricOptions]
+  );
+
+  const activeMetric = visibleMetrics.some((option) => option.value === currentMetric)
+    ? currentMetric
+    : visibleMetrics[0].value;
 
   const selectedSlug = currentSlug ?? "";
 
@@ -41,11 +58,11 @@ export function FloatingNav({ compounds, currentMetric, currentSlug }: FloatingN
 
   const onSelectCompound = (slug: string): void => {
     if (!slug) {
-      router.push(`/?metric=${currentMetric}`);
+      router.push(`/?metric=${activeMetric}`);
       return;
     }
 
-    router.push(`/peptides/${slug}?metric=${currentMetric}`);
+    router.push(`/peptides/${slug}?metric=${activeMetric}`);
   };
 
   return (
@@ -68,13 +85,13 @@ export function FloatingNav({ compounds, currentMetric, currentSlug }: FloatingN
         </select>
 
         <div className="metric-toggle" role="tablist" aria-label="Price metric">
-          {METRIC_OPTIONS.map((option) => (
+          {visibleMetrics.map((option) => (
             <button
               key={option.value}
               type="button"
               role="tab"
-              aria-selected={currentMetric === option.value}
-              data-active={currentMetric === option.value}
+              aria-selected={activeMetric === option.value}
+              data-active={activeMetric === option.value}
               className="metric-pill"
               onClick={() => setMetric(option.value)}
             >

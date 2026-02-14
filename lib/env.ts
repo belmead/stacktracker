@@ -14,6 +14,10 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   ALERT_FROM_EMAIL: z.string().email().optional(),
   ALERT_TO_EMAIL: z.string().email().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-5-mini"),
+  FIRECRAWL_API_KEY: z.string().optional(),
+  FIRECRAWL_API_BASE_URL: z.string().url().default("https://api.firecrawl.dev/v2"),
   SCRAPER_USER_AGENT: z
     .string()
     .default("StackTrackerBot/1.0 (+https://stacktracker.com)"),
@@ -34,6 +38,10 @@ export const env = envSchema.parse({
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   ALERT_FROM_EMAIL: process.env.ALERT_FROM_EMAIL,
   ALERT_TO_EMAIL: process.env.ALERT_TO_EMAIL,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_MODEL: process.env.OPENAI_MODEL,
+  FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
+  FIRECRAWL_API_BASE_URL: process.env.FIRECRAWL_API_BASE_URL,
   SCRAPER_USER_AGENT: process.env.SCRAPER_USER_AGENT,
   FINNRICK_VENDORS_URL: process.env.FINNRICK_VENDORS_URL
 });

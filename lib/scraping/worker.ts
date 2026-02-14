@@ -9,6 +9,7 @@ import {
   recordScrapeEvent
 } from "@/lib/db/queries";
 import {
+  markVendorOffersUnavailableByUrls,
   createAiAgentTask,
   ensureFormulation,
   resolveCompoundAlias,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/db/mutations";
 import { env } from "@/lib/env";
 import { computeMetricPrices, resolveVariantTotals } from "@/lib/metrics";
-import { extractOffersFromHtml } from "@/lib/scraping/extractors";
+import { discoverOffers } from "@/lib/scraping/discovery";
 import { parseProductName } from "@/lib/scraping/normalize";
 import { scrapeWithPlaywright } from "@/lib/scraping/playwright-agent";
 import { checkRobotsPermission } from "@/lib/scraping/robots";
@@ -41,6 +42,7 @@ interface CounterSummary {
   offersUpdated: number;
   offersUnchanged: number;
   unresolvedAliases: number;
+  aliasesSkippedByAi: number;
   aiTasksQueued: number;
 }
 
@@ -83,6 +85,53 @@ function summarizeStatus(input: {
   return "success";
 }
 
+async function recordDiscoveryEvents(input: {
+  scrapeRunId: string;
+  vendorId: string;
+  pageUrl: string;
+  source: string | null;
+  attempts: Array<{
+    source: string;
+    success: boolean;
+    offers: number;
+    error?: string;
+  }>;
+}): Promise<void> {
+  if (input.source) {
+    await recordScrapeEvent({
+      scrapeRunId: input.scrapeRunId,
+      vendorId: input.vendorId,
+      severity: "info",
+      code: "DISCOVERY_SOURCE",
+      message: `Offer discovery succeeded via ${input.source}`,
+      payload: {
+        pageUrl: input.pageUrl,
+        source: input.source,
+        attempts: input.attempts
+      }
+    });
+  }
+
+  for (const attempt of input.attempts) {
+    if (!attempt.error) {
+      continue;
+    }
+
+    await recordScrapeEvent({
+      scrapeRunId: input.scrapeRunId,
+      vendorId: input.vendorId,
+      severity: "warn",
+      code: "DISCOVERY_ATTEMPT_FAILED",
+      message: `Discovery source ${attempt.source} failed`,
+      payload: {
+        pageUrl: input.pageUrl,
+        source: attempt.source,
+        error: attempt.error
+      }
+    });
+  }
+}
+
 async function persistExtractedOffers(input: {
   scrapeRunId: string;
   target: {
@@ -93,14 +142,41 @@ async function persistExtractedOffers(input: {
   summary: CounterSummary;
 }): Promise<number> {
   let persisted = 0;
+  const unresolvedProductUrls: string[] = [];
 
   for (const extracted of input.offers) {
     const parsed = parseProductName(extracted.productName);
 
     await ensureFormulation(parsed.formulationCode, parsed.formulationLabel);
 
-    const resolution = await resolveCompoundAlias(parsed.compoundRawName);
+    const resolution = await resolveCompoundAlias({
+      rawName: parsed.compoundRawName,
+      productName: extracted.productName,
+      productUrl: extracted.productUrl,
+      vendorName: input.target.vendorName
+    });
     if (!resolution.compoundId) {
+      if (resolution.skipReview) {
+        input.summary.aliasesSkippedByAi += 1;
+        unresolvedProductUrls.push(extracted.productUrl);
+
+        await recordScrapeEvent({
+          scrapeRunId: input.scrapeRunId,
+          vendorId: input.target.vendorId,
+          severity: "info",
+          code: "ALIAS_SKIPPED_AI",
+          message: `Skipped alias by AI classification: ${parsed.compoundRawName}`,
+          payload: {
+            productName: extracted.productName,
+            productUrl: extracted.productUrl,
+            reason: resolution.reason,
+            confidence: resolution.confidence
+          }
+        });
+
+        continue;
+      }
+
       input.summary.unresolvedAliases += 1;
 
       const reviewId = await createReviewQueueItem({
@@ -132,6 +208,7 @@ async function persistExtractedOffers(input: {
         `<p>Vendor: ${input.target.vendorName}</p><p>Product: ${extracted.productName}</p><p>Unresolved alias: ${parsed.compoundRawName}</p><p>Review Queue ID: ${reviewId}</p>`
       );
 
+      unresolvedProductUrls.push(extracted.productUrl);
       continue;
     }
 
@@ -185,6 +262,24 @@ async function persistExtractedOffers(input: {
     persisted += 1;
   }
 
+  const deactivatedCount = await markVendorOffersUnavailableByUrls({
+    vendorId: input.target.vendorId,
+    productUrls: unresolvedProductUrls
+  });
+
+  if (deactivatedCount > 0) {
+    await recordScrapeEvent({
+      scrapeRunId: input.scrapeRunId,
+      vendorId: input.target.vendorId,
+      severity: "info",
+      code: "OFFERS_DEACTIVATED",
+      message: `Marked ${deactivatedCount} existing offer(s) unavailable after unresolved alias detection`,
+      payload: {
+        count: deactivatedCount
+      }
+    });
+  }
+
   return persisted;
 }
 
@@ -205,6 +300,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
     offersUpdated: 0,
     offersUnchanged: 0,
     unresolvedAliases: 0,
+    aliasesSkippedByAi: 0,
     aiTasksQueued: 0
   };
 
@@ -329,27 +425,25 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
         }
 
         let offers = [] as ExtractedOffer[];
-
-        try {
-          const html = await fetchPageHtml(target.pageUrl);
-          offers = extractOffersFromHtml({
-            html,
+        const discovery = await discoverOffers({
+          target: {
             vendorPageId: target.vendorPageId,
             vendorId: target.vendorId,
+            vendorName: target.vendorName,
+            websiteUrl: target.websiteUrl,
             pageUrl: target.pageUrl
-          });
-        } catch (error) {
-          await recordScrapeEvent({
-            scrapeRunId,
-            vendorId: target.vendorId,
-            severity: "warn",
-            code: "FETCH_FAILED",
-            message: `HTML fetch failed for ${target.pageUrl}`,
-            payload: {
-              error: error instanceof Error ? error.message : "unknown"
-            }
-          });
-        }
+          },
+          fetchPageHtml
+        });
+
+        offers = discovery.offers;
+        await recordDiscoveryEvents({
+          scrapeRunId,
+          vendorId: target.vendorId,
+          pageUrl: target.pageUrl,
+          source: discovery.source,
+          attempts: discovery.attempts
+        });
 
         if (offers.length === 0 && input.scrapeMode === "aggressive_manual") {
           offers = await scrapeWithPlaywright({

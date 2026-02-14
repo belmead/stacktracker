@@ -82,7 +82,8 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
         "user-agent": env.SCRAPER_USER_AGENT,
         accept: "text/html,application/xhtml+xml"
       },
-      cache: "no-store"
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000)
     });
 
     if (!response.ok) {
@@ -134,6 +135,13 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
 
     return { scrapeRunId, summary };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error && error.name === "TimeoutError"
+        ? `Finnrick fetch timed out after 30s (${env.FINNRICK_VENDORS_URL})`
+        : error instanceof Error
+          ? error.message
+          : "unknown";
+
     await recordScrapeEvent({
       scrapeRunId,
       vendorId: null,
@@ -141,7 +149,7 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
       code: "FINNRICK_SYNC_FAILED",
       message: "Finnrick sync failed",
       payload: {
-        error: error instanceof Error ? error.message : "unknown"
+        error: errorMessage
       }
     });
 
@@ -150,15 +158,15 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
       status: "failed",
       summary: {
         ...summary,
-        error: error instanceof Error ? error.message : "unknown"
+        error: errorMessage
       }
     });
 
     await sendAdminAlert(
       "Stack Tracker Finnrick sync failed",
-      `<p>The Finnrick ratings sync failed.</p><p>Error: ${error instanceof Error ? error.message : "unknown"}</p>`
+      `<p>The Finnrick ratings sync failed.</p><p>Error: ${errorMessage}</p>`
     );
 
-    throw error;
+    throw new Error(errorMessage);
   }
 }

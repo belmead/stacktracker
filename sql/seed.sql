@@ -22,10 +22,25 @@ set
   website_url = excluded.website_url,
   updated_at = now();
 
+with desired_vendor_pages as (
+  select * from (
+    values
+      ('elite-research-usa', 'http://eliteresearchusa.com/', 'catalog'),
+      ('peptide-labs-x', 'https://peptidelabsx.com/', 'catalog'),
+      ('peptide-labs-x', 'https://peptidelabsx.com/product-category/products-all/', 'catalog'),
+      ('peptide-labs-x', 'https://peptidelabsx.com/shop/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/shop/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/us-finished/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/foundation/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/longevity/', 'catalog'),
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/strength/', 'catalog')
+  ) as t(vendor_slug, url, page_type)
+)
 insert into vendor_pages (vendor_id, url, page_type)
-select v.id, v.website_url, 'catalog'
-from vendors v
-where v.slug in ('elite-research-usa', 'peptide-labs-x', 'nexgen-peptides')
+select v.id, dvp.url, dvp.page_type
+from desired_vendor_pages dvp
+inner join vendors v on v.slug = dvp.vendor_slug
 on conflict (vendor_id, url) do update
 set
   page_type = excluded.page_type,

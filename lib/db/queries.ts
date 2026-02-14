@@ -117,7 +117,7 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
       group by cv.id
       order by
         case when cv.formulation_code = 'vial' then 0 else 1 end,
-        count(oc.id) desc,
+        count(distinct oc.vendor_id) desc,
         cv.created_at asc
       limit 1
     `;
@@ -131,28 +131,39 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
     const metricUnsafe = sql.unsafe(metricCol);
     const vendorRows = await sql<
       {
+        vendorId: string;
         vendorName: string;
         vendorUrl: string;
         metricPrice: number | null;
         finnrickRating: number | null;
       }[]
     >`
-      select
-        v.name as vendor_name,
-        coalesce(oc.product_url, v.website_url) as vendor_url,
-        ${metricUnsafe}::float8 as metric_price,
-        fr.rating::float8 as finnrick_rating
-      from offers_current oc
-      inner join vendors v on v.id = oc.vendor_id
-      left join lateral (
-        select rating
-        from finnrick_ratings fr
-        where fr.vendor_id = v.id
-        order by fr.rated_at desc
-        limit 1
-      ) fr on true
-      where oc.variant_id = ${variantId} and oc.is_available = true
-      order by ${metricUnsafe} asc nulls last, v.name asc
+      with ranked as (
+        select
+          v.id as vendor_id,
+          v.name as vendor_name,
+          coalesce(oc.product_url, v.website_url) as vendor_url,
+          ${metricUnsafe}::float8 as metric_price,
+          fr.rating::float8 as finnrick_rating,
+          row_number() over (
+            partition by v.id
+            order by ${metricUnsafe} asc nulls last, oc.last_seen_at desc, oc.id asc
+          ) as vendor_rank
+        from offers_current oc
+        inner join vendors v on v.id = oc.vendor_id
+        left join lateral (
+          select rating
+          from finnrick_ratings fr
+          where fr.vendor_id = v.id
+          order by fr.rated_at desc
+          limit 1
+        ) fr on true
+        where oc.variant_id = ${variantId} and oc.is_available = true
+      )
+      select vendor_id, vendor_name, vendor_url, metric_price, finnrick_rating
+      from ranked
+      where vendor_rank = 1
+      order by metric_price asc nulls last, vendor_name asc
       limit 5
     `;
 
@@ -166,6 +177,7 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
       heroMetricPrice: heroMetric,
       imageUrl: HOME_IMAGE_PLACEHOLDER,
       rows: vendorRows.map((vendor) => ({
+        vendorId: vendor.vendorId,
         vendorName: vendor.vendorName,
         vendorUrl: vendor.vendorUrl,
         metricPrice: vendor.metricPrice,
@@ -217,15 +229,16 @@ export async function getVariantFilters(compoundId: string): Promise<VariantFilt
       cv.formulation_code,
       f.display_name as formulation_label,
       cv.display_size_label as size_label,
-      count(oc.id)::int as vendor_coverage
+      count(distinct oc.vendor_id)::int as vendor_coverage
     from compound_variants cv
     inner join formulations f on f.code = cv.formulation_code
     left join offers_current oc on oc.variant_id = cv.id and oc.is_available = true
     where cv.compound_id = ${compoundId}
     group by cv.id, f.display_name
+    having count(distinct oc.vendor_id) > 0
     order by
       case when cv.formulation_code = 'vial' then 0 else 1 end,
-      count(oc.id) desc,
+      count(distinct oc.vendor_id) desc,
       cv.display_size_label asc
   `;
 }
@@ -243,7 +256,7 @@ export async function getDefaultVariantId(compoundId: string): Promise<string | 
     group by cv.id
     order by
       case when cv.formulation_code = 'vial' then 0 else 1 end,
-      count(oc.id) desc,
+      count(distinct oc.vendor_id) desc,
       cv.created_at asc
     limit 1
   `;
@@ -335,7 +348,7 @@ export async function getOffersForVariant(input: {
       count: number;
     }[]
   >`
-    select count(*)::int as count
+    select count(distinct vendor_id)::int as count
     from offers_current
     where variant_id = ${input.variantId} and is_available = true
   `;
@@ -354,28 +367,47 @@ export async function getOffersForVariant(input: {
       lastSeenAt: string;
     }[]
   >`
+    with ranked as (
+      select
+        v.id as vendor_id,
+        v.name as vendor_name,
+        coalesce(oc.product_url, v.website_url) as vendor_url,
+        ${metricUnsafe}::float8 as metric_price,
+        oc.price_per_mg_cents::float8 as price_per_mg_cents,
+        oc.price_per_ml_cents::float8 as price_per_ml_cents,
+        oc.price_per_vial_cents::float8 as price_per_vial_cents,
+        oc.price_per_unit_cents::float8 as price_per_unit_cents,
+        fr.rating::float8 as finnrick_rating,
+        oc.last_seen_at,
+        row_number() over (
+          partition by v.id
+          order by ${metricUnsafe} asc nulls last, oc.last_seen_at desc, oc.id asc
+        ) as vendor_rank
+      from offers_current oc
+      inner join vendors v on v.id = oc.vendor_id
+      left join lateral (
+        select rating
+        from finnrick_ratings fr
+        where fr.vendor_id = v.id
+        order by fr.rated_at desc
+        limit 1
+      ) fr on true
+      where oc.variant_id = ${input.variantId} and oc.is_available = true
+    )
     select
-      v.id as vendor_id,
-      v.name as vendor_name,
-      coalesce(oc.product_url, v.website_url) as vendor_url,
-      ${metricUnsafe}::float8 as metric_price,
-      oc.price_per_mg_cents::float8 as price_per_mg_cents,
-      oc.price_per_ml_cents::float8 as price_per_ml_cents,
-      oc.price_per_vial_cents::float8 as price_per_vial_cents,
-      oc.price_per_unit_cents::float8 as price_per_unit_cents,
-      fr.rating::float8 as finnrick_rating,
-      oc.last_seen_at
-    from offers_current oc
-    inner join vendors v on v.id = oc.vendor_id
-    left join lateral (
-      select rating
-      from finnrick_ratings fr
-      where fr.vendor_id = v.id
-      order by fr.rated_at desc
-      limit 1
-    ) fr on true
-    where oc.variant_id = ${input.variantId} and oc.is_available = true
-    order by ${metricUnsafe} asc nulls last, v.name asc
+      vendor_id,
+      vendor_name,
+      vendor_url,
+      metric_price,
+      price_per_mg_cents,
+      price_per_ml_cents,
+      price_per_vial_cents,
+      price_per_unit_cents,
+      finnrick_rating,
+      last_seen_at
+    from ranked
+    where vendor_rank = 1
+    order by metric_price asc nulls last, vendor_name asc
     limit ${input.pageSize} offset ${offset}
   `;
 
@@ -425,7 +457,36 @@ export async function getTrendPoints(input: {
     order by effective_from asc
   `;
 
-  return rows;
+  if (rows.length > 0) {
+    return rows;
+  }
+
+  const fallbackRows = await sql<
+    {
+      timestamp: string;
+      value: number | null;
+    }[]
+  >`
+    select
+      max(last_seen_at) as timestamp,
+      avg(${metricUnsafe})::float8 as value
+    from offers_current
+    where
+      variant_id = ${input.variantId}
+      and is_available = true
+      and ${metricUnsafe} is not null
+  `;
+
+  if (!fallbackRows[0]?.timestamp || fallbackRows[0].value === null) {
+    return [];
+  }
+
+  return [
+    {
+      timestamp: fallbackRows[0].timestamp,
+      value: fallbackRows[0].value
+    }
+  ];
 }
 
 export async function createScrapeRun(input: {
@@ -542,6 +603,37 @@ export async function createReviewQueueItem(input: {
   confidence?: number | null;
   payload?: Record<string, unknown>;
 }): Promise<string> {
+  if (input.type === "alias_match" && input.rawText && input.rawText.trim().length > 0) {
+    const existingRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from review_queue
+      where queue_type = ${input.type}
+        and status in ('open', 'in_progress')
+        and vendor_id is not distinct from ${input.vendorId ?? null}
+        and page_url is not distinct from ${input.pageUrl ?? null}
+        and raw_text is not distinct from ${input.rawText ?? null}
+      order by created_at asc
+      limit 1
+    `;
+
+    const existing = existingRows[0];
+    if (existing) {
+      await sql`
+        update review_queue
+        set confidence = ${input.confidence ?? null},
+            payload = ${toJson(input.payload ?? {})},
+            updated_at = now()
+        where id = ${existing.id}
+      `;
+
+      return existing.id;
+    }
+  }
+
   const rows = await sql<
     {
       id: string;
@@ -594,7 +686,7 @@ export async function listOpenReviewItems(): Promise<
       v.name as vendor_name,
       rq.page_url,
       rq.raw_text,
-      rq.confidence,
+      rq.confidence::float8 as confidence,
       rq.payload,
       rq.created_at
     from review_queue rq

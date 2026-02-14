@@ -36,7 +36,7 @@ export function HomeCard({ card }: HomeCardProps) {
             </thead>
             <tbody>
               {card.rows.map((row) => (
-                <tr key={`${card.compoundSlug}-${row.vendorName}`}>
+                <tr key={`${card.compoundSlug}-${row.vendorId}`}>
                   <td>
                     <a href={row.vendorUrl} target="_blank" rel="noopener noreferrer nofollow">
                       {row.vendorName}

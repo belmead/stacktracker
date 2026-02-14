@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db/client";
 import type { JSONValue } from "postgres";
 import type { CompoundResolution, ExtractedOffer, MetricPriceMap, ResolutionStatus } from "@/lib/types";
+import { classifyCompoundAliasWithAi } from "@/lib/ai/compound-classifier";
 
 const toJson = (value: unknown) => sql.json(value as JSONValue);
 
@@ -38,24 +39,60 @@ function normalizeAlias(input: string): string {
     .replace(/\s+/g, " ");
 }
 
-const COMPOUND_RULES: Array<{ pattern: RegExp; canonical: string; confidence: number }> = [
-  { pattern: /\bbpc\s*157\b/, canonical: "bpc-157", confidence: 0.99 },
-  { pattern: /\bretatrutide\b|\bglp\s*3\b|\ber\s*-?\s*rt\b|\b[a-z]?\s*-?rt\b/, canonical: "retatrutide", confidence: 0.9 },
-  { pattern: /\bcjc\s*1295\b/, canonical: "cjc-1295", confidence: 0.99 },
-  { pattern: /\bipamorelin\b/, canonical: "ipamorelin", confidence: 0.99 }
-];
+interface ResolveCompoundAliasInput {
+  rawName: string;
+  productName?: string;
+  productUrl?: string;
+  vendorName?: string;
+}
 
-export async function resolveCompoundAlias(rawName: string): Promise<CompoundResolution> {
+async function upsertAlias(input: {
+  compoundId: string | null;
+  alias: string;
+  aliasNormalized: string;
+  source: "scraped" | "import";
+  confidence: number;
+  status: ResolutionStatus;
+}): Promise<void> {
+  await sql`
+    insert into compound_aliases (compound_id, alias, alias_normalized, source, confidence, status)
+    values (${input.compoundId}, ${input.alias}, ${input.aliasNormalized}, ${input.source}, ${input.confidence}, ${input.status})
+    on conflict (alias_normalized) do update
+    set compound_id = excluded.compound_id,
+        source = excluded.source,
+        confidence = excluded.confidence,
+        status = excluded.status,
+        updated_at = now()
+  `;
+}
+
+export async function resolveCompoundAlias(input: string | ResolveCompoundAliasInput): Promise<CompoundResolution> {
+  const rawName = typeof input === "string" ? input : input.rawName;
+  const productName = typeof input === "string" ? input : input.productName ?? input.rawName;
+  const productUrl = typeof input === "string" ? "" : input.productUrl ?? "";
+  const vendorName = typeof input === "string" ? "" : input.vendorName ?? "";
+
   const aliasNormalized = normalizeAlias(rawName);
+  if (!aliasNormalized) {
+    return {
+      compoundId: null,
+      confidence: 0,
+      status: "resolved",
+      aliasNormalized,
+      reason: "empty_alias",
+      skipReview: true
+    };
+  }
 
   const aliasRows = await sql<
     {
       compoundId: string | null;
       confidence: number;
       status: ResolutionStatus;
+      source: string;
     }[]
   >`
-    select compound_id, confidence, status
+    select compound_id, confidence, status, source
     from compound_aliases
     where alias_normalized = ${aliasNormalized}
     order by created_at desc
@@ -73,6 +110,27 @@ export async function resolveCompoundAlias(rawName: string): Promise<CompoundRes
     };
   }
 
+  if (alias && alias.status === "resolved") {
+    return {
+      compoundId: null,
+      confidence: alias.confidence,
+      status: "resolved",
+      aliasNormalized,
+      reason: "cached_non_trackable",
+      skipReview: true
+    };
+  }
+
+  if (alias && alias.status === "needs_review" && alias.source === "import") {
+    return {
+      compoundId: null,
+      confidence: alias.confidence,
+      status: "needs_review",
+      aliasNormalized,
+      reason: "ai_review_cached"
+    };
+  }
+
   const directMatch = await sql<
     {
       id: string;
@@ -87,15 +145,14 @@ export async function resolveCompoundAlias(rawName: string): Promise<CompoundRes
   `;
 
   if (directMatch[0]) {
-    await sql`
-      insert into compound_aliases (compound_id, alias, alias_normalized, source, confidence, status)
-      values (${directMatch[0].id}, ${rawName}, ${aliasNormalized}, 'scraped', 1.0, 'auto_matched')
-      on conflict (alias_normalized) do update
-      set compound_id = excluded.compound_id,
-          confidence = excluded.confidence,
-          status = excluded.status,
-          updated_at = now()
-    `;
+    await upsertAlias({
+      compoundId: directMatch[0].id,
+      alias: rawName,
+      aliasNormalized,
+      source: "scraped",
+      confidence: 1,
+      status: "auto_matched"
+    });
 
     return {
       compoundId: directMatch[0].id,
@@ -106,54 +163,103 @@ export async function resolveCompoundAlias(rawName: string): Promise<CompoundRes
     };
   }
 
-  for (const rule of COMPOUND_RULES) {
-    if (rule.pattern.test(aliasNormalized)) {
-      const compoundRows = await sql<
-        {
-          id: string;
-        }[]
-      >`
-        select id
-        from compounds
-        where slug = ${rule.canonical}
-        limit 1
-      `;
+  const compounds = await sql<
+    {
+      id: string;
+      slug: string;
+      name: string;
+    }[]
+  >`
+    select id, slug, name
+    from compounds
+    where is_active = true
+    order by name asc
+  `;
 
-      if (compoundRows[0]) {
-        await sql`
-          insert into compound_aliases (compound_id, alias, alias_normalized, source, confidence, status)
-          values (${compoundRows[0].id}, ${rawName}, ${aliasNormalized}, 'rules', ${rule.confidence}, 'auto_matched')
-          on conflict (alias_normalized) do update
-          set compound_id = excluded.compound_id,
-              confidence = excluded.confidence,
-              status = excluded.status,
-              updated_at = now()
-        `;
+  const classification = await classifyCompoundAliasWithAi({
+    rawName,
+    productName,
+    productUrl,
+    vendorName,
+    compounds
+  });
 
-        return {
-          compoundId: compoundRows[0].id,
-          confidence: rule.confidence,
-          status: "auto_matched",
-          aliasNormalized,
-          reason: "rule_match"
-        };
-      }
+  if (classification?.decision === "match" && classification.canonicalSlug) {
+    const matched = compounds.find((compound) => compound.slug === classification.canonicalSlug);
+    if (matched) {
+      await upsertAlias({
+        compoundId: matched.id,
+        alias: classification.alias,
+        aliasNormalized,
+        source: "import",
+        confidence: classification.confidence,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: matched.id,
+        confidence: classification.confidence,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "ai_match"
+      };
     }
   }
 
-  await sql`
-    insert into compound_aliases (compound_id, alias, alias_normalized, source, confidence, status)
-    values (null, ${rawName}, ${aliasNormalized}, 'scraped', 0.0, 'needs_review')
-    on conflict (alias_normalized) do update
-    set updated_at = now(), status = 'needs_review'
-  `;
+  if (classification?.decision === "skip") {
+    await upsertAlias({
+      compoundId: null,
+      alias: classification.alias,
+      aliasNormalized,
+      source: "import",
+      confidence: classification.confidence,
+      status: "resolved"
+    });
+
+    return {
+      compoundId: null,
+      confidence: classification.confidence,
+      status: "resolved",
+      aliasNormalized,
+      reason: "ai_skip_non_trackable",
+      skipReview: true
+    };
+  }
+
+  if (classification?.decision === "review") {
+    await upsertAlias({
+      compoundId: null,
+      alias: classification.alias,
+      aliasNormalized,
+      source: "import",
+      confidence: classification.confidence,
+      status: "needs_review"
+    });
+
+    return {
+      compoundId: null,
+      confidence: classification.confidence,
+      status: "needs_review",
+      aliasNormalized,
+      reason: "ai_review"
+    };
+  }
+
+  await upsertAlias({
+    compoundId: null,
+    alias: rawName,
+    aliasNormalized,
+    source: "scraped",
+    confidence: 0,
+    status: "needs_review"
+  });
 
   return {
     compoundId: null,
     confidence: 0,
     status: "needs_review",
     aliasNormalized,
-    reason: "unknown_alias"
+    reason: "ai_unavailable_fallback"
   };
 }
 
@@ -405,6 +511,112 @@ export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"crea
   });
 
   return "updated";
+}
+
+export async function markVendorOffersUnavailableByUrls(input: { vendorId: string; productUrls: string[] }): Promise<number> {
+  const productUrls = Array.from(new Set(input.productUrls.map((url) => url.trim()).filter(Boolean)));
+  if (productUrls.length === 0) {
+    return 0;
+  }
+
+  return sql.begin(async (tx) => {
+    const q = tx as unknown as typeof sql;
+    const rows = await q<
+      {
+        id: string;
+        scrapeRunId: string | null;
+        vendorId: string;
+        variantId: string;
+        productUrl: string;
+        currencyCode: string;
+        listPriceCents: number;
+        pricePerMgCents: number | null;
+        pricePerMlCents: number | null;
+        pricePerVialCents: number | null;
+        pricePerUnitCents: number | null;
+        rawPayload: JSONValue | null;
+      }[]
+    >`
+      select
+        oc.id,
+        oh.scrape_run_id,
+        oc.vendor_id,
+        oc.variant_id,
+        oc.product_url,
+        oc.currency_code,
+        oc.list_price_cents,
+        oc.price_per_mg_cents::float8 as price_per_mg_cents,
+        oc.price_per_ml_cents::float8 as price_per_ml_cents,
+        oc.price_per_vial_cents::float8 as price_per_vial_cents,
+        oc.price_per_unit_cents::float8 as price_per_unit_cents,
+        oc.raw_payload
+      from offers_current oc
+      left join lateral (
+        select scrape_run_id
+        from offer_history oh
+        where oh.offer_current_id = oc.id and oh.effective_to is null
+        order by oh.effective_from desc
+        limit 1
+      ) oh on true
+      where
+        oc.vendor_id = ${input.vendorId}
+        and oc.product_url = any(${sql.array(productUrls)}::text[])
+        and oc.is_available = true
+    `;
+
+    for (const row of rows) {
+      await q`
+        update offer_history
+        set effective_to = now()
+        where offer_current_id = ${row.id} and effective_to is null
+      `;
+
+      await q`
+        update offers_current
+        set is_available = false,
+            last_scraped_at = now(),
+            updated_at = now()
+        where id = ${row.id}
+      `;
+
+      await q`
+        insert into offer_history (
+          offer_current_id,
+          scrape_run_id,
+          vendor_id,
+          variant_id,
+          product_url,
+          currency_code,
+          list_price_cents,
+          price_per_mg_cents,
+          price_per_ml_cents,
+          price_per_vial_cents,
+          price_per_unit_cents,
+          is_available,
+          effective_from,
+          raw_payload
+        )
+        values (
+          ${row.id},
+          ${row.scrapeRunId},
+          ${row.vendorId},
+          ${row.variantId},
+          ${row.productUrl},
+          ${row.currencyCode},
+          ${row.listPriceCents},
+          ${row.pricePerMgCents},
+          ${row.pricePerMlCents},
+          ${row.pricePerVialCents},
+          ${row.pricePerUnitCents},
+          false,
+          now(),
+          ${toJson(row.rawPayload ?? {})}
+        )
+      `;
+    }
+
+    return rows.length;
+  });
 }
 
 export async function setReviewResolution(input: {

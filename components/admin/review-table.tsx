@@ -9,7 +9,7 @@ interface ReviewItem {
   vendorName: string | null;
   pageUrl: string | null;
   rawText: string | null;
-  confidence: number | null;
+  confidence: number | string | null;
   payload: Record<string, unknown>;
   createdAt: string;
 }
@@ -29,6 +29,19 @@ export function ReviewTable({ items, compounds }: ReviewTableProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const defaultCompoundId = useMemo(() => compounds[0]?.id ?? "", [compounds]);
+
+  const formatConfidence = (value: number | string | null): string => {
+    if (value === null) {
+      return "N/A";
+    }
+
+    const parsed = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(parsed)) {
+      return "N/A";
+    }
+
+    return parsed.toFixed(2);
+  };
 
   const submit = async (reviewId: string, body: Record<string, unknown>): Promise<void> => {
     setBusyId(reviewId);
@@ -95,7 +108,7 @@ export function ReviewTable({ items, compounds }: ReviewTableProps) {
               </a>
             </p>
           ) : null}
-          <p>Confidence: {item.confidence === null ? "N/A" : item.confidence.toFixed(2)}</p>
+          <p>Confidence: {formatConfidence(item.confidence)}</p>
 
           <div className="review-actions">
             <form onSubmit={(event) => onResolveExisting(event, item.id)}>

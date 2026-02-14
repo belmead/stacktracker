@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "db:bootstrap": "node --env-file-if-exists=.env.local --import tsx scripts/db-bootstrap.ts",
     "job:vendors": "node --env-file-if-exists=.env.local --import tsx scripts/run-vendor-job.ts",
-    "job:finnrick": "node --env-file-if-exists=.env.local --import tsx scripts/run-finnrick-job.ts"
+    "job:finnrick": "node --env-file-if-exists=.env.local --import tsx scripts/run-finnrick-job.ts",
+    "job:review-ai": "node --env-file-if-exists=.env.local --import tsx scripts/run-review-ai-triage.ts"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
