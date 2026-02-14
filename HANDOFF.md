@@ -8,6 +8,28 @@
 - Most recent vendor run: `ddf3aedb-8af1-43a4-a6a8-ef3a0716c75c` (`pagesTotal=10`, `pagesSuccess=9`, `pagesFailed=1`).
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
 
+## Final Update (2026-02-14)
+- New user-facing vendor catalog route is implemented:
+  - `/vendors/[slug]`
+  - Peptide vendor names now link internally to vendor catalog page.
+  - Vendor page includes simplified "Last updated: h:mmam TZ" label (user locale timezone when available, UTC fallback on initial render).
+- Admin category management is implemented:
+  - `/admin/categories`
+  - Supports multi-category assignment and explicit primary category per compound.
+  - Backed by `POST /api/admin/categories` and audited via `admin_audit_log`.
+- Supabase integrity cleanup completed:
+  - Removed legacy/unused empty tables: `peptides`, `products`, `product_ingredients`, `price_history`, `finnrick_scores`.
+  - Added one-primary-category guard index for `compound_category_map`.
+- Category taxonomy import was expanded and executed successfully:
+  - `npm run db:import-categories`
+  - Latest result: seeded `48` compounds, applied `48/48` assignments, `0` unresolved.
+  - Multi-category mappings are active (for example `NAD+` and `NMN` mapped to both `Longevity` and `Mitochondrial`).
+- CJC taxonomy is explicitly split into 3 separate compounds:
+  - `CJC-1295`
+  - `CJC-1295 with DAC (and IPA)`
+  - `CJC-1295 no DAC (with IPA)`
+  - All mapped to `Growth hormone`.
+
 ## Session Update (2026-02-14)
 - Product scope is now explicitly narrowed:
   - US-focused vendors only
@@ -53,18 +75,50 @@
   - `championpeptide.com` (domain-for-sale)
   - plus previously excluded: `peptidegurus.com`, `peptidesforsale.com`, `tydes.net`
 - New unresolved/needs corrected URL:
-  - The Naughty Needle
-  - Peptide Haven
-  - Uther
-  - Injectify
   - PurePeptides (`purepeptides.co.uk`)
-  - Alpha-Gen
   - Peptide Worldwide
   - Amplified Amino (missing URL)
+  - Precision Peptide Co
+  - Amino Lair
+  - UWA Elite Peptides
+
+## Follow-up Update (2026-02-14)
+- Product/UI work completed:
+  - Category-first browsing now has dedicated routes:
+    - `/categories`
+    - `/categories/[slug]`
+  - Nav category selection now routes to category pages.
+- User-provided vendor decisions captured:
+  - Accepted storefront candidates for onboarding:
+    - `thepeptidehaven.com`
+    - `us.injectify.is`
+    - `purepeptidelabs.shop` (US-based signals found on site: domestic U.S. shipping policy + Cedar Park, TX contact location)
+    - `alphagresearch.com`
+    - `kits4less.com`
+    - `toppeptides.com`
+    - `dragonpharmastore.com`
+  - Excluded by user:
+    - The Naughty Needle (vendor not found)
+    - Uther (non-US)
+    - M-Peptides (not a real vendor by that name)
+    - Zen Peptides (non-US)
+    - Mix Peptides (not a real vendor)
+- Still unresolved from prior batches:
+  - PurePeptides (`purepeptides.co.uk`)
+  - Peptide Worldwide
+  - Amplified Amino (missing URL)
+  - Precision Peptide Co
+  - Amino Lair
+  - UWA Elite Peptides
 
 ## Reminder For Next Session
-- Product/UI task requested by user:
-  - Update nav dropdown to include **Categories** so users can browse categories before choosing a specific peptide.
+- Validate new UX paths in browser:
+  - `/vendors/[slug]` (timestamp display + offering rows)
+  - `/admin/categories` (multi-category save + primary toggle)
+  - `/categories` and `/categories/[slug]`
+- Run ingestion and confirm seeded taxonomy compounds begin receiving variants/offers as vendors are onboarded:
+  - `npm run job:vendors`
+  - `npm run job:review-ai`
 
 ## What Was Changed In This Session
 - Setup/docs and env guidance updated for Supabase/Vercel flow.
@@ -87,6 +141,13 @@
   - HTML extraction (with schema.org JSON-LD) third
   - Firecrawl managed scrape fallback (if API key configured) fourth
   - Playwright fallback remains for aggressive/manual mode
+- Added vendor catalog pages and internal vendor navigation from peptide tables.
+- Added admin category editor with API + audit logging.
+- Added category import utility and npm script:
+  - `scripts/import-compound-categories.ts`
+  - `npm run db:import-categories`
+- Added legacy-table cleanup SQL utility:
+  - `sql/maintenance/cleanup-legacy-peptides.sql`
 
 ## Current Data Reality (Important)
 - `bpc-157` is no longer empty after the latest expanded scrape.
@@ -94,6 +155,7 @@
 - Blended BPC entries (for example BPC + TB500 blends) are now inactive for `bpc-157`.
 - One vendor target still fails with `no_data`: `Elite Research USA` root page.
 - `unresolvedAliases` remains high; review queue is active and expected.
+- Category taxonomy mappings are now complete for curated set (`48/48` imported), but many newly seeded compounds are placeholders until scrape discovery creates active variants/offers.
 
 ## Open Risks / Remaining Work
 - AI-first compound classification now drives match/skip/review decisions; quality depends on `OPENAI_API_KEY` + model behavior.
@@ -101,6 +163,7 @@
 - Email delivery depends on Resend sender/domain verification; local server-log fallback is available.
 - Some non-BPC compound alias quality still needs curation because unresolved volume is high.
 - Firecrawl fallback is optional and currently disabled unless `FIRECRAWL_API_KEY` is set.
+- Newly seeded compounds may not yet appear in public selectors until they have active variants/offers (current selector filter requires variant presence).
 
 ## Immediate Next Steps
 1. Start app on a known free port:

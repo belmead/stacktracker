@@ -16,6 +16,7 @@ MVP goals:
 - Public pages:
   - Homepage with top-five peptide cards.
   - Peptide detail pages with formulation/size selection, trend chart, and paginated vendor table.
+  - Vendor detail pages listing all active vendor offerings with last-updated timestamp.
 - Metric-aware display (formulation-aware defaults).
 - Vendor scraping pipeline with safe mode and AI fallback task queue.
 - Finnrick rating ingestion with `N/A` fallback.
@@ -23,6 +24,8 @@ MVP goals:
 - Review queue for ambiguous alias resolution.
 - Featured compounds management.
 - Vendor aggressive rescrape queue.
+ - Category browsing pages and category-first navigation.
+ - Admin category editor supporting multi-category + primary-category assignment.
 
 ### Out of scope (MVP)
 - Checkout or transactions.
@@ -56,6 +59,13 @@ MVP goals:
 - Formulation/size options when multiple variants exist.
 - Vendor table (page size 10) with pagination for >10 vendors.
 - Default sort is formulation-aware (vial products prioritize `price_per_mg`).
+- Vendor name links route to internal vendor detail page; external listing links remain available.
+
+### Vendor page
+- Shared floating navigation.
+- Vendor identity + Finnrick rating.
+- Simplified "Last updated" timestamp (user locale timezone when available; fallback to default rendering).
+- Active offers table (compound, product link, formulation/size, list price, selected metric, last seen).
 
 ### Compliance UX
 - Mandatory 18+ / informational disclaimer gate on first visit.
@@ -142,6 +152,7 @@ Admin:
 - `POST /api/admin/review/:id/resolve`
 - `POST /api/admin/featured`
 - `POST /api/admin/vendors/:id/rescrape`
+- `POST /api/admin/categories`
 
 Internal jobs:
 - `GET|POST /api/internal/jobs/vendors`
@@ -162,9 +173,12 @@ Internal jobs:
 - UI stage: minimal wireframe with tokenized styles.
 - Typography note: reserve slot for future Geist Pixel application in polish phase.
 
-## 10. Current Implementation Status (as of 2026-02-13)
+## 10. Current Implementation Status (as of 2026-02-14)
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
+- Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
+- Category taxonomy importer is implemented and currently applies `48/48` curated assignments with multi-category support.
+- Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
 - Remaining prerequisite for first full ingestion cycle is infrastructure:
   - Working Postgres endpoint (Supabase recommended).
   - Project env vars populated in Vercel and local `.env.local`.

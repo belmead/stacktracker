@@ -956,6 +956,105 @@ export async function setPrimaryCategory(input: { compoundId: string; categoryId
   });
 }
 
+export async function setCompoundCategories(input: {
+  compoundId: string;
+  categoryIds: string[];
+  primaryCategoryId: string | null;
+  actorEmail: string;
+}): Promise<void> {
+  const categoryIds = Array.from(new Set(input.categoryIds));
+  const primaryCategoryId = input.primaryCategoryId ?? (categoryIds[0] ?? null);
+
+  if (primaryCategoryId && !categoryIds.includes(primaryCategoryId)) {
+    throw new Error("Primary category must be included in selected categories.");
+  }
+
+  await sql.begin(async (tx) => {
+    const q = tx as unknown as typeof sql;
+
+    const beforeRows = await q<
+      {
+        categoryId: string;
+        isPrimary: boolean;
+      }[]
+    >`
+      select category_id, is_primary
+      from compound_category_map
+      where compound_id = ${input.compoundId}
+      order by is_primary desc, category_id asc
+    `;
+
+    if (categoryIds.length === 0) {
+      await q`
+        delete from compound_category_map
+        where compound_id = ${input.compoundId}
+      `;
+    } else {
+      const validCategoryRows = await q<
+        {
+          id: string;
+        }[]
+      >`
+        select id
+        from categories
+        where id in ${q(categoryIds)}
+      `;
+
+      if (validCategoryRows.length !== categoryIds.length) {
+        throw new Error("One or more category IDs are invalid.");
+      }
+
+      await q`
+        delete from compound_category_map
+        where compound_id = ${input.compoundId}
+          and category_id not in ${q(categoryIds)}
+      `;
+
+      await q`
+        update compound_category_map
+        set is_primary = false,
+            updated_at = now()
+        where compound_id = ${input.compoundId}
+      `;
+
+      for (const categoryId of categoryIds) {
+        const isPrimary = categoryId === primaryCategoryId;
+        await q`
+          insert into compound_category_map (compound_id, category_id, is_primary)
+          values (${input.compoundId}, ${categoryId}, ${isPrimary})
+          on conflict (compound_id, category_id) do update
+          set is_primary = excluded.is_primary,
+              updated_at = now()
+        `;
+      }
+    }
+
+    const afterRows = await q<
+      {
+        categoryId: string;
+        isPrimary: boolean;
+      }[]
+    >`
+      select category_id, is_primary
+      from compound_category_map
+      where compound_id = ${input.compoundId}
+      order by is_primary desc, category_id asc
+    `;
+
+    await q`
+      insert into admin_audit_log (actor_email, action, target_type, target_id, before_payload, after_payload)
+      values (
+        ${input.actorEmail},
+        'update_compound_categories',
+        'compound',
+        ${input.compoundId},
+        ${toJson({ mappings: beforeRows })},
+        ${toJson({ mappings: afterRows })}
+      )
+    `;
+  });
+}
+
 export async function touchVendorPageStatus(input: {
   vendorPageId: string;
   status: string;

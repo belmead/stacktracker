@@ -159,6 +159,7 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
             <thead>
               <tr>
                 <th>Vendor</th>
+                <th>Listing</th>
                 <th>{formatMetricLabel(metric)}</th>
                 <th>Finnrick</th>
                 <th>Last seen</th>
@@ -168,8 +169,11 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
               {offersPage.rows.map((row) => (
                 <tr key={row.vendorId}>
                   <td>
+                    <Link href={`/vendors/${row.vendorSlug}?metric=${metric}`}>{row.vendorName}</Link>
+                  </td>
+                  <td>
                     <a href={row.vendorUrl} target="_blank" rel="noopener noreferrer nofollow">
-                      {row.vendorName}
+                      View offer
                     </a>
                   </td>
                   <td>{formatPriceCents(row.metricPrice)}</td>

@@ -9,12 +9,20 @@ interface CompoundOption {
   id: string;
   slug: string;
   name: string;
+  categorySlug: string | null;
+  categoryName: string | null;
+}
+
+interface CategoryOption {
+  slug: string;
+  name: string;
 }
 
 interface FloatingNavProps {
   compounds: CompoundOption[];
   currentMetric: MetricType;
   currentSlug?: string;
+  currentCategorySlug?: string;
   metricOptions?: MetricType[];
 }
 
@@ -32,7 +40,22 @@ function normalizeMetricOptions(values: MetricType[] | undefined): MetricType[] 
   return Array.from(new Set(source));
 }
 
-export function FloatingNav({ compounds, currentMetric, currentSlug, metricOptions }: FloatingNavProps) {
+function withQuery(pathname: string, values: Record<string, string | null | undefined>): string {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(values)) {
+    if (!value) {
+      continue;
+    }
+
+    search.set(key, value);
+  }
+
+  const suffix = search.toString();
+  return suffix ? `${pathname}?${suffix}` : pathname;
+}
+
+export function FloatingNav({ compounds, currentMetric, currentSlug, currentCategorySlug, metricOptions }: FloatingNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -47,6 +70,44 @@ export function FloatingNav({ compounds, currentMetric, currentSlug, metricOptio
     : visibleMetrics[0].value;
 
   const selectedSlug = currentSlug ?? "";
+  const activeCompound = compounds.find((compound) => compound.slug === selectedSlug) ?? null;
+
+  const categoryOptions = useMemo<CategoryOption[]>(() => {
+    const grouped = new Map<string, string>();
+
+    for (const compound of compounds) {
+      if (!compound.categorySlug || !compound.categoryName) {
+        continue;
+      }
+
+      grouped.set(compound.categorySlug, compound.categoryName);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([slug, name]) => ({ slug, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [compounds]);
+
+  const requestedCategory = searchParams.get("category") ?? "";
+  const hasRequestedCategory = categoryOptions.some((option) => option.slug === requestedCategory);
+  const hasCurrentCategory = currentCategorySlug
+    ? categoryOptions.some((option) => option.slug === currentCategorySlug)
+    : false;
+  const selectedCategory = hasRequestedCategory
+    ? requestedCategory
+    : hasCurrentCategory
+      ? (currentCategorySlug ?? "")
+      : activeCompound?.categorySlug ?? "";
+
+  const visibleCompounds = useMemo(() => {
+    if (!selectedCategory) {
+      return compounds;
+    }
+
+    return compounds.filter((compound) => compound.categorySlug === selectedCategory);
+  }, [compounds, selectedCategory]);
+
+  const selectedVisibleSlug = visibleCompounds.some((compound) => compound.slug === selectedSlug) ? selectedSlug : "";
 
   const params = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
 
@@ -56,13 +117,51 @@ export function FloatingNav({ compounds, currentMetric, currentSlug, metricOptio
     router.push(`${pathname}?${next.toString()}`);
   };
 
-  const onSelectCompound = (slug: string): void => {
-    if (!slug) {
-      router.push(`/?metric=${activeMetric}`);
+  const onSelectCategory = (categorySlug: string): void => {
+    if (!categorySlug) {
+      router.push(
+        withQuery("/", {
+          metric: activeMetric
+        })
+      );
       return;
     }
 
-    router.push(`/peptides/${slug}?metric=${activeMetric}`);
+    router.push(
+      withQuery(`/categories/${categorySlug}`, {
+        metric: activeMetric
+      })
+    );
+  };
+
+  const onSelectCompound = (slug: string): void => {
+    if (!slug) {
+      if (selectedCategory) {
+        router.push(
+          withQuery(`/categories/${selectedCategory}`, {
+            metric: activeMetric
+          })
+        );
+        return;
+      }
+
+      router.push(
+        withQuery("/", {
+          metric: activeMetric
+        })
+      );
+      return;
+    }
+
+    const nextCompound = compounds.find((compound) => compound.slug === slug) ?? null;
+    const nextCategory = selectedCategory || nextCompound?.categorySlug || null;
+
+    router.push(
+      withQuery(`/peptides/${slug}`, {
+        metric: activeMetric,
+        category: nextCategory
+      })
+    );
   };
 
   return (
@@ -72,12 +171,27 @@ export function FloatingNav({ compounds, currentMetric, currentSlug, metricOptio
       <div className="nav-actions">
         <select
           className="select-control"
-          value={selectedSlug}
+          value={selectedCategory}
+          onChange={(event) => onSelectCategory(event.target.value)}
+          aria-label="Select category"
+        >
+          <option value="">All categories</option>
+          {categoryOptions.map((category) => (
+            <option key={category.slug} value={category.slug}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="select-control"
+          value={selectedVisibleSlug}
           onChange={(event) => onSelectCompound(event.target.value)}
           aria-label="Select peptide"
+          disabled={visibleCompounds.length === 0}
         >
-          <option value="">Browse peptides</option>
-          {compounds.map((compound) => (
+          <option value="">{selectedCategory ? "Browse peptides in category" : "Browse peptides"}</option>
+          {visibleCompounds.map((compound) => (
             <option key={compound.id} value={compound.slug}>
               {compound.name}
             </option>

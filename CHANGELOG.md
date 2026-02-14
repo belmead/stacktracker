@@ -38,10 +38,28 @@ All notable changes to Stack Tracker are documented in this file.
   - Handoff/restart instructions in `HANDOFF.md`.
   - Updated runbook in `README.md`.
   - Vendor onboarding notes for US-direct-storefront scope and platform/API verification.
+- Category browsing routes:
+  - `GET /categories`
+  - `GET /categories/:slug`
+- Vendor offering route:
+  - `GET /vendors/:slug`
+- Admin category management API:
+  - `POST /api/admin/categories`
 - Vendor audit utility script:
   - `scripts/finnrick-vendor-audit.js` for Finnrick vendor extraction, filtering, website discovery, platform detection, and API probing.
+- DB maintenance script:
+  - `sql/maintenance/cleanup-legacy-peptides.sql` for safe cleanup of legacy `public.peptides` table (preflight, backup, dependency checks, guarded drop).
+- Category import script:
+  - `scripts/import-compound-categories.ts` plus `npm run db:import-categories` for curated category upsert/mapping with multi-category support.
+  - Import flow now seeds missing compounds from the curated taxonomy list before mapping.
 
 ### Changed
+- Floating nav category selector now routes to category pages before compound selection.
+- Admin home now shows active compounds missing a primary category assignment.
+- Peptide vendor-name links now route internally to vendor catalog pages, with external offer links retained.
+- Added admin category editor workflow with multi-category and primary-category assignment controls.
+- Vendor catalog page now shows simplified "Last updated" time in user locale with UTC fallback.
+- Category import flow now seeds curated taxonomy compounds and supports split multi-category mappings (e.g., `Longevity / Mitochondrial`).
 - Improved environment handling for local and production-first setup:
   - Added `DATABASE_PREPARE` toggle.
   - Documented Supabase/Vercel-first deployment path.

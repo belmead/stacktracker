@@ -10,7 +10,9 @@ Primary docs:
 
 - Public pages:
   - `/` homepage with floating nav, metric toggle, hero, and 5 featured cards.
+  - `/categories` + `/categories/[slug]` category browsing pages.
   - `/peptides/[slug]` detail template with trend chart, formulation/size switching, and vendor pagination.
+  - `/vendors/[slug]` vendor offerings page with latest-update timestamp and catalog table.
 - APIs:
   - `GET /api/home`
   - `GET /api/compounds/:slug`
@@ -30,6 +32,7 @@ Primary docs:
   - Review queue resolution.
   - Featured compound ordering.
   - Vendor rescrape trigger.
+  - `/admin/categories` category editor (multi-category assignment + primary category selection).
 - Compliance:
   - 18+ gate + informational disclaimer.
 - SEO:
@@ -89,6 +92,18 @@ If you are reusing an existing database with stale tables from older iterations,
 ```bash
 DB_BOOTSTRAP_RESET=true npm run db:bootstrap
 ```
+
+Import curated compound categories (supports multi-category mappings via `compound_category_map`):
+- The importer now seeds missing compounds from the curated taxonomy list before applying category mappings.
+
+```bash
+npm run db:import-categories
+```
+
+Legacy Supabase cleanup plan for old `public.peptides` table:
+- SQL script: `sql/maintenance/cleanup-legacy-peptides.sql`
+- Behavior: preflight + timestamped backup + dependency checks + guarded drop (`perform_drop=false` by default).
+- Run in Supabase SQL editor (or `psql`) and only enable the drop flag after checks are clean.
 
 5. Run app:
 
@@ -159,6 +174,12 @@ npm run test
   - `npm run typecheck`
   - `npm run lint`
   - `npm run test`
+- Supabase schema drift cleanup completed:
+  - Removed legacy empty tables (`peptides`, `products`, `product_ingredients`, `price_history`, `finnrick_scores`).
+  - Added one-primary-category guard index on `compound_category_map`.
+- Curated category taxonomy import is operational:
+  - `npm run db:import-categories` now seeds/matches compounds and applies category mappings.
+  - Latest run applied `48`/`48` assignments with `0` unresolved.
 - Remaining launch blockers are infrastructure setup tasks:
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars
@@ -250,19 +271,34 @@ Excluded:
 - `https://tydes.net/` (not a peptide vendor)
 
 Needs corrected URL or manual check:
-- The Naughty Needle
-- Peptide Haven
-- Uther
-- Injectify
 - PurePeptides (`purepeptides.co.uk` fetch failed)
-- Alpha-Gen
 - Peptide Worldwide
 - Amplified Amino (URL missing)
 - Precision Peptide Co
 - Amino Lair
 - UWA Elite Peptides
 
-### Product reminder (UI)
+### Latest user-provided decisions (2026-02-14, follow-up)
 
-Planned nav improvement:
-- Add categories into the main nav dropdown so users can browse by category first, then drill into peptides.
+Accepted storefront candidates (to onboard/evaluate with API-first checks):
+- `https://thepeptidehaven.com/`
+- `https://us.injectify.is/`
+- `https://purepeptidelabs.shop/` (US-based signals present: domestic U.S. shipping policy and contact location in Cedar Park, TX)
+- `https://www.alphagresearch.com/`
+- `https://kits4less.com/`
+- `https://www.toppeptides.com/`
+- `http://dragonpharmastore.com/`
+
+Excluded by user:
+- The Naughty Needle (vendor not found)
+- Uther (non-US)
+- M-Peptides (not a real vendor by that name)
+- Zen Peptides (non-US)
+- Mix Peptides (not a real vendor)
+
+### Product update (UI)
+
+Implemented:
+- Category-first browsing via nav dropdown plus category routes:
+  - `/categories`
+  - `/categories/[slug]`

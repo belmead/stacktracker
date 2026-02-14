@@ -53,14 +53,93 @@ export interface CompoundSelectorOption {
   id: string;
   slug: string;
   name: string;
+  categorySlug: string | null;
+  categoryName: string | null;
 }
 
 export async function getCompoundSelectorOptions(): Promise<CompoundSelectorOption[]> {
   return sql<CompoundSelectorOption[]>`
-    select id, slug, name
-    from compounds
-    where is_active = true
-    order by name asc
+    select
+      c.id,
+      c.slug,
+      c.name,
+      cat.slug as category_slug,
+      cat.name as category_name
+    from compounds c
+    left join compound_category_map ccm on ccm.compound_id = c.id and ccm.is_primary = true
+    left join categories cat on cat.id = ccm.category_id
+    where
+      c.is_active = true
+      and exists (
+        select 1
+        from compound_variants cv
+        where cv.compound_id = c.id and cv.is_active = true
+      )
+    order by c.name asc
+  `;
+}
+
+export interface CategorySummary {
+  id: string;
+  slug: string;
+  name: string;
+  compoundCount: number;
+}
+
+export async function getCategorySummaries(): Promise<CategorySummary[]> {
+  return sql<CategorySummary[]>`
+    select
+      cat.id,
+      cat.slug,
+      cat.name,
+      count(distinct c.id)::int as compound_count
+    from categories cat
+    left join compound_category_map ccm on ccm.category_id = cat.id
+    left join compounds c on c.id = ccm.compound_id and c.is_active = true
+    group by cat.id, cat.slug, cat.name
+    having count(distinct c.id) > 0
+    order by cat.name asc
+  `;
+}
+
+export async function getCategoryBySlug(slug: string): Promise<CategorySummary | null> {
+  const rows = await sql<CategorySummary[]>`
+    select
+      cat.id,
+      cat.slug,
+      cat.name,
+      count(distinct c.id)::int as compound_count
+    from categories cat
+    left join compound_category_map ccm on ccm.category_id = cat.id
+    left join compounds c on c.id = ccm.compound_id and c.is_active = true
+    where cat.slug = ${slug}
+    group by cat.id, cat.slug, cat.name
+    limit 1
+  `;
+
+  return rows[0] ?? null;
+}
+
+export interface CategoryCompound {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
+export async function getCompoundsForCategorySlug(slug: string): Promise<CategoryCompound[]> {
+  return sql<CategoryCompound[]>`
+    select
+      c.id,
+      c.slug,
+      c.name,
+      c.description
+    from compounds c
+    inner join compound_category_map ccm on ccm.compound_id = c.id
+    inner join categories cat on cat.id = ccm.category_id
+    where cat.slug = ${slug} and c.is_active = true
+    group by c.id, c.slug, c.name, c.description
+    order by c.name asc
   `;
 }
 
@@ -318,6 +397,7 @@ export async function getVariantByFilter(input: {
 
 export interface OfferRow {
   vendorId: string;
+  vendorSlug: string;
   vendorName: string;
   vendorUrl: string;
   metricPrice: number | null;
@@ -356,6 +436,7 @@ export async function getOffersForVariant(input: {
   const rows = await sql<
     {
       vendorId: string;
+      vendorSlug: string;
       vendorName: string;
       vendorUrl: string;
       metricPrice: number | null;
@@ -370,6 +451,7 @@ export async function getOffersForVariant(input: {
     with ranked as (
       select
         v.id as vendor_id,
+        v.slug as vendor_slug,
         v.name as vendor_name,
         coalesce(oc.product_url, v.website_url) as vendor_url,
         ${metricUnsafe}::float8 as metric_price,
@@ -396,6 +478,7 @@ export async function getOffersForVariant(input: {
     )
     select
       vendor_id,
+      vendor_slug,
       vendor_name,
       vendor_url,
       metric_price,
@@ -414,6 +497,7 @@ export async function getOffersForVariant(input: {
   return {
     rows: rows.map((row) => ({
       vendorId: row.vendorId,
+      vendorSlug: row.vendorSlug,
       vendorName: row.vendorName,
       vendorUrl: row.vendorUrl,
       metricPrice: row.metricPrice,
@@ -424,6 +508,154 @@ export async function getOffersForVariant(input: {
         price_per_unit: row.pricePerUnitCents
       },
       finnrickRating: row.finnrickRating,
+      lastSeenAt: row.lastSeenAt
+    })),
+    total: totalRows[0]?.count ?? 0,
+    page: input.page,
+    pageSize: input.pageSize
+  };
+}
+
+export interface VendorDetails {
+  id: string;
+  name: string;
+  slug: string;
+  websiteUrl: string;
+  finnrickRating: number | null;
+  lastUpdatedAt: string | null;
+}
+
+export async function getVendorBySlug(slug: string): Promise<VendorDetails | null> {
+  const rows = await sql<VendorDetails[]>`
+    select
+      v.id,
+      v.name,
+      v.slug,
+      v.website_url,
+      fr.rating::float8 as finnrick_rating,
+      summary.last_updated_at
+    from vendors v
+    left join lateral (
+      select rating
+      from finnrick_ratings fr
+      where fr.vendor_id = v.id
+      order by fr.rated_at desc
+      limit 1
+    ) fr on true
+    left join lateral (
+      select max(last_seen_at) as last_updated_at
+      from offers_current oc
+      where oc.vendor_id = v.id and oc.is_available = true
+    ) summary on true
+    where v.slug = ${slug} and v.is_active = true
+    limit 1
+  `;
+
+  return rows[0] ?? null;
+}
+
+export interface VendorOfferRow {
+  id: string;
+  compoundSlug: string;
+  compoundName: string;
+  formulationLabel: string;
+  sizeLabel: string;
+  productName: string;
+  productUrl: string;
+  metricPrice: number | null;
+  metricValues: MetricPriceMap;
+  listPriceCents: number;
+  lastSeenAt: string;
+}
+
+export interface VendorOfferPage {
+  rows: VendorOfferRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getOffersForVendor(input: {
+  vendorId: string;
+  metric: MetricType;
+  page: number;
+  pageSize: number;
+}): Promise<VendorOfferPage> {
+  const metricCol = metricColumn(input.metric);
+  const metricUnsafe = sql.unsafe(metricCol);
+  const offset = (input.page - 1) * input.pageSize;
+
+  const totalRows = await sql<
+    {
+      count: number;
+    }[]
+  >`
+    select count(*)::int as count
+    from offers_current
+    where vendor_id = ${input.vendorId} and is_available = true
+  `;
+
+  const rows = await sql<
+    {
+      id: string;
+      compoundSlug: string;
+      compoundName: string;
+      formulationLabel: string;
+      sizeLabel: string;
+      productName: string;
+      productUrl: string;
+      metricPrice: number | null;
+      pricePerMgCents: number | null;
+      pricePerMlCents: number | null;
+      pricePerVialCents: number | null;
+      pricePerUnitCents: number | null;
+      listPriceCents: number;
+      lastSeenAt: string;
+    }[]
+  >`
+    select
+      oc.id,
+      c.slug as compound_slug,
+      c.name as compound_name,
+      f.display_name as formulation_label,
+      cv.display_size_label as size_label,
+      oc.product_name,
+      oc.product_url,
+      ${metricUnsafe}::float8 as metric_price,
+      oc.price_per_mg_cents::float8 as price_per_mg_cents,
+      oc.price_per_ml_cents::float8 as price_per_ml_cents,
+      oc.price_per_vial_cents::float8 as price_per_vial_cents,
+      oc.price_per_unit_cents::float8 as price_per_unit_cents,
+      oc.list_price_cents,
+      oc.last_seen_at
+    from offers_current oc
+    inner join compound_variants cv on cv.id = oc.variant_id
+    inner join compounds c on c.id = cv.compound_id
+    inner join formulations f on f.code = cv.formulation_code
+    where
+      oc.vendor_id = ${input.vendorId}
+      and oc.is_available = true
+    order by c.name asc, cv.display_size_label asc, ${metricUnsafe} asc nulls last, oc.last_seen_at desc
+    limit ${input.pageSize} offset ${offset}
+  `;
+
+  return {
+    rows: rows.map((row) => ({
+      id: row.id,
+      compoundSlug: row.compoundSlug,
+      compoundName: row.compoundName,
+      formulationLabel: row.formulationLabel,
+      sizeLabel: row.sizeLabel,
+      productName: row.productName,
+      productUrl: row.productUrl,
+      metricPrice: row.metricPrice,
+      metricValues: {
+        price_per_mg: row.pricePerMgCents,
+        price_per_ml: row.pricePerMlCents,
+        price_per_vial: row.pricePerVialCents,
+        price_per_unit: row.pricePerUnitCents
+      },
+      listPriceCents: row.listPriceCents,
       lastSeenAt: row.lastSeenAt
     })),
     total: totalRows[0]?.count ?? 0,
@@ -713,6 +945,15 @@ export async function listVendorsForAdmin(): Promise<
   `;
 }
 
+export async function listVendorSlugOptions(): Promise<{ slug: string }[]> {
+  return sql`
+    select slug
+    from vendors
+    where is_active = true
+    order by slug asc
+  `;
+}
+
 export async function listFeaturedCompounds(): Promise<
   {
     compoundId: string;
@@ -749,5 +990,90 @@ export async function listCompoundCatalog(): Promise<
     from compounds
     where is_active = true
     order by name asc
+  `;
+}
+
+export async function listCategoriesForAdmin(): Promise<
+  {
+    id: string;
+    name: string;
+    slug: string;
+    mappedCompounds: number;
+  }[]
+> {
+  return sql`
+    select
+      cat.id,
+      cat.name,
+      cat.slug,
+      count(distinct ccm.compound_id)::int as mapped_compounds
+    from categories cat
+    left join compound_category_map ccm on ccm.category_id = cat.id
+    group by cat.id, cat.name, cat.slug
+    order by cat.name asc
+  `;
+}
+
+export async function listCompoundCategoryAssignmentsForAdmin(): Promise<
+  {
+    id: string;
+    name: string;
+    slug: string;
+    categoryIds: string[];
+    primaryCategoryId: string | null;
+    activeOfferCount: number;
+  }[]
+> {
+  return sql`
+    select
+      c.id,
+      c.name,
+      c.slug,
+      coalesce(category_map.category_ids, '{}'::text[]) as category_ids,
+      category_map.primary_category_id,
+      coalesce(offer_stats.active_offer_count, 0)::int as active_offer_count
+    from compounds c
+    left join lateral (
+      select
+        array_agg(ccm.category_id::text order by ccm.is_primary desc, cat.name asc) as category_ids,
+        max(case when ccm.is_primary then ccm.category_id::text else null end) as primary_category_id
+      from compound_category_map ccm
+      inner join categories cat on cat.id = ccm.category_id
+      where ccm.compound_id = c.id
+    ) category_map on true
+    left join lateral (
+      select count(distinct oc.id)::int as active_offer_count
+      from compound_variants cv
+      inner join offers_current oc on oc.variant_id = cv.id and oc.is_available = true
+      where cv.compound_id = c.id and cv.is_active = true
+    ) offer_stats on true
+    where c.is_active = true
+    order by c.name asc
+  `;
+}
+
+export async function listCompoundsMissingPrimaryCategory(): Promise<
+  {
+    id: string;
+    name: string;
+    slug: string;
+    variantCount: number;
+    activeOfferCount: number;
+  }[]
+> {
+  return sql`
+    select
+      c.id,
+      c.name,
+      c.slug,
+      count(distinct cv.id)::int as variant_count,
+      count(distinct oc.id) filter (where oc.is_available = true)::int as active_offer_count
+    from compounds c
+    left join compound_category_map ccm on ccm.compound_id = c.id and ccm.is_primary = true
+    left join compound_variants cv on cv.compound_id = c.id and cv.is_active = true
+    left join offers_current oc on oc.variant_id = cv.id and oc.is_available = true
+    where c.is_active = true and ccm.id is null
+    group by c.id, c.name, c.slug
+    order by c.name asc
   `;
 }
