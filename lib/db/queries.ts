@@ -1083,6 +1083,41 @@ export async function createReviewQueueItem(input: {
   return rows[0].id;
 }
 
+export async function pruneOperationalNoiseData(input: {
+  reviewQueueRetentionDays: number;
+  nonTrackableAliasRetentionDays: number;
+}): Promise<{ reviewQueueDeleted: number; nonTrackableAliasesDeleted: number }> {
+  const reviewQueueRows = await sql<{ deleted: number }[]>`
+    with deleted as (
+      delete from review_queue
+      where
+        status in ('resolved', 'ignored')
+        and coalesce(resolved_at, updated_at, created_at) < now() - (${input.reviewQueueRetentionDays} * interval '1 day')
+      returning 1
+    )
+    select count(*)::int as deleted
+    from deleted
+  `;
+
+  const aliasRows = await sql<{ deleted: number }[]>`
+    with deleted as (
+      delete from compound_aliases
+      where
+        compound_id is null
+        and status = 'resolved'
+        and updated_at < now() - (${input.nonTrackableAliasRetentionDays} * interval '1 day')
+      returning 1
+    )
+    select count(*)::int as deleted
+    from deleted
+  `;
+
+  return {
+    reviewQueueDeleted: reviewQueueRows[0]?.deleted ?? 0,
+    nonTrackableAliasesDeleted: aliasRows[0]?.deleted ?? 0
+  };
+}
+
 export async function listOpenReviewItems(): Promise<
   {
     id: string;

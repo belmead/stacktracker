@@ -44,7 +44,10 @@ function buildPrompt(input: CompoundClassificationInput): string {
       rules: [
         "If this is clearly not a peptide product we track (site chrome/CTA text, accessories, bundles not representing a single compound), set decision='skip'.",
         "If it matches one tracked single-compound peptide, set decision='match' and canonical_slug to an allowed slug.",
-        "If ambiguous, blended, stacked, or uncertain, set decision='review'.",
+        "If this is blended/stacked/multi-compound, set decision='skip' because this tracker stores single-compound offers only.",
+        "Ignore storefront noise such as prices and CTA fragments like 'add to cart', 'select options', and similar UI text.",
+        "Vendors may euphemize compounds (for example retatrutide can appear as 'RT' or 'GLP-3'); use the allowed compound list and context to infer safe matches.",
+        "If uncertain and you cannot safely choose match or skip, set decision='review'.",
         "Alias should be a concise cleaned product phrase humans recognize.",
         "canonical_slug must be null unless decision='match'.",
         "Never invent slugs outside allowed_compounds."

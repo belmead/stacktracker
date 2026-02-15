@@ -2,7 +2,14 @@ import { sql } from "@/lib/db/client";
 import type { JSONValue } from "postgres";
 import type { CompoundResolution, ExtractedOffer, MetricPriceMap, ResolutionStatus } from "@/lib/types";
 import { classifyCompoundAliasWithAi } from "@/lib/ai/compound-classifier";
-import { normalizeAlias, stripAliasDescriptors } from "@/lib/alias/normalize";
+import {
+  isLikelyBlendOrStackProduct,
+  isLikelyNonProductListing,
+  isLikelyRetatrutideShorthand,
+  normalizeAlias,
+  stripAliasDescriptors,
+  stripStorefrontNoise
+} from "@/lib/alias/normalize";
 
 const toJson = (value: unknown) => sql.json(value as JSONValue);
 
@@ -60,10 +67,13 @@ async function upsertAlias(input: {
 }
 
 export async function resolveCompoundAlias(input: string | ResolveCompoundAliasInput): Promise<CompoundResolution> {
-  const rawName = typeof input === "string" ? input : input.rawName;
-  const productName = typeof input === "string" ? input : input.productName ?? input.rawName;
+  const rawNameOriginal = typeof input === "string" ? input : input.rawName;
+  const productNameOriginal = typeof input === "string" ? input : input.productName ?? input.rawName;
+  const rawName = stripStorefrontNoise(rawNameOriginal);
+  const productName = stripStorefrontNoise(productNameOriginal);
   const productUrl = typeof input === "string" ? "" : input.productUrl ?? "";
   const vendorName = typeof input === "string" ? "" : input.vendorName ?? "";
+  const likelyBlendOrStack = isLikelyBlendOrStackProduct(rawName) || isLikelyBlendOrStackProduct(productName);
 
   const aliasNormalized = normalizeAlias(rawName);
   const strippedAlias = stripAliasDescriptors(aliasNormalized);
@@ -76,6 +86,26 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
       status: "resolved",
       aliasNormalized,
       reason: "empty_alias",
+      skipReview: true
+    };
+  }
+
+  if (isLikelyNonProductListing(rawName) || isLikelyNonProductListing(productName)) {
+    await upsertAlias({
+      compoundId: null,
+      alias: rawName || rawNameOriginal,
+      aliasNormalized,
+      source: "scraped",
+      confidence: 1,
+      status: "resolved"
+    });
+
+    return {
+      compoundId: null,
+      confidence: 1,
+      status: "resolved",
+      aliasNormalized,
+      reason: "non_product_listing",
       skipReview: true
     };
   }
@@ -151,6 +181,40 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
         status: "needs_review",
         aliasNormalized,
         reason: "ai_review_cached"
+      };
+    }
+  }
+
+  if (!likelyBlendOrStack && (isLikelyRetatrutideShorthand(rawName) || isLikelyRetatrutideShorthand(productName))) {
+    const retatrutideRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug = 'retatrutide'
+        and is_active = true
+      limit 1
+    `;
+
+    const retatrutideId = retatrutideRows[0]?.id;
+    if (retatrutideId) {
+      await upsertAlias({
+        compoundId: retatrutideId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.9,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: retatrutideId,
+        confidence: 0.9,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "retatrutide_shorthand_rule"
       };
     }
   }
@@ -242,14 +306,14 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
   `;
 
   const classification = await classifyCompoundAliasWithAi({
-    rawName,
-    productName,
+    rawName: rawName || rawNameOriginal,
+    productName: productName || productNameOriginal,
     productUrl,
     vendorName,
     compounds
   });
 
-  if (classification?.decision === "match" && classification.canonicalSlug) {
+  if (classification?.decision === "match" && classification.canonicalSlug && !likelyBlendOrStack) {
     const matched = compounds.find((compound) => compound.slug === classification.canonicalSlug);
     if (matched) {
       await upsertAlias({
@@ -287,6 +351,26 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
       status: "resolved",
       aliasNormalized,
       reason: "ai_skip_non_trackable",
+      skipReview: true
+    };
+  }
+
+  if (classification && likelyBlendOrStack) {
+    await upsertAlias({
+      compoundId: null,
+      alias: classification.alias,
+      aliasNormalized,
+      source: "import",
+      confidence: classification.confidence,
+      status: "resolved"
+    });
+
+    return {
+      compoundId: null,
+      confidence: classification.confidence,
+      status: "resolved",
+      aliasNormalized,
+      reason: "ai_skip_blend_or_stack",
       skipReview: true
     };
   }

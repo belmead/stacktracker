@@ -25,7 +25,9 @@ const envSchema = z.object({
   VENDOR_SCRAPE_CONCURRENCY: z.coerce.number().int().positive().max(3).default(2),
   SCRAPE_RUN_STALE_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   SCRAPE_RUN_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(20),
-  SCRAPE_RUN_LAG_ALERT_SECONDS: z.coerce.number().int().positive().default(120)
+  SCRAPE_RUN_LAG_ALERT_SECONDS: z.coerce.number().int().positive().default(120),
+  REVIEW_QUEUE_RETENTION_DAYS: z.coerce.number().int().positive().default(45),
+  NON_TRACKABLE_ALIAS_RETENTION_DAYS: z.coerce.number().int().positive().default(120)
 });
 
 export const env = envSchema.parse({
@@ -51,5 +53,7 @@ export const env = envSchema.parse({
   VENDOR_SCRAPE_CONCURRENCY: process.env.VENDOR_SCRAPE_CONCURRENCY,
   SCRAPE_RUN_STALE_TTL_MINUTES: process.env.SCRAPE_RUN_STALE_TTL_MINUTES,
   SCRAPE_RUN_HEARTBEAT_SECONDS: process.env.SCRAPE_RUN_HEARTBEAT_SECONDS,
-  SCRAPE_RUN_LAG_ALERT_SECONDS: process.env.SCRAPE_RUN_LAG_ALERT_SECONDS
+  SCRAPE_RUN_LAG_ALERT_SECONDS: process.env.SCRAPE_RUN_LAG_ALERT_SECONDS,
+  REVIEW_QUEUE_RETENTION_DAYS: process.env.REVIEW_QUEUE_RETENTION_DAYS,
+  NON_TRACKABLE_ALIAS_RETENTION_DAYS: process.env.NON_TRACKABLE_ALIAS_RETENTION_DAYS
 });

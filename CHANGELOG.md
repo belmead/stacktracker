@@ -57,8 +57,11 @@ All notable changes to Stack Tracker are documented in this file.
   - `tests/unit/categories-page.test.ts` validates `/categories` metric fallback/preservation and category link rendering.
 - Alias normalization regression tests:
   - `tests/unit/alias-normalize.test.ts` validates descriptor stripping for dosage/formulation suffixes while preserving ambiguous blend terms.
+  - Expanded coverage now validates storefront-noise stripping, blend/stack detection, retatrutide shorthand inference, and non-product listing detection.
 - HTML extraction regression test:
   - `tests/unit/extractors.test.ts` now validates Inertia `data-page` extraction for product+variant payloads.
+- Product-name normalization regression test:
+  - `tests/unit/normalize.test.ts` now validates storefront-noise stripping during inferred alias extraction.
 - Discovery/runtime regression tests:
   - `tests/unit/discovery.test.ts` now validates per-origin API cache reuse and unsupported-origin memoization.
   - `tests/unit/worker-alerts.test.ts` validates batched alias-alert HTML formatting/truncation.
@@ -88,6 +91,9 @@ All notable changes to Stack Tracker are documented in this file.
 - Admin category editor save workflow now catches network/fetch failures and surfaces an explicit row-level error.
 - HTML discovery now parses Inertia `#app[data-page]` payloads and converts embedded product/variant records into offers (fixes coverage gaps on custom storefronts like `eliteresearchusa.com`).
 - Alias resolution now attempts deterministic stripped-name matching (removing dosage/formulation descriptors like `10mg`, `vial`, `capsules`) before falling back to AI/review, improving auto-match coverage when base compounds already exist.
+- Alias normalization now strips storefront noise (for example prices and CTA fragments like `add to cart`) before deterministic and AI matching.
+- Blend/stack and non-product listing aliases are auto-skipped for single-compound tracking integrity.
+- Added deterministic retatrutide shorthand fallback matching (`RT`, `GLP-3`, `NG-1 RT` context) to reduce avoidable review queue load.
 - Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 - Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
@@ -101,6 +107,10 @@ All notable changes to Stack Tracker are documented in this file.
 - Vendor scrape worker now uses bounded page concurrency (`VENDOR_SCRAPE_CONCURRENCY`, default `2`, max `3`).
 - Added optional runtime controls in env (`VENDOR_SCRAPE_CONCURRENCY`, `SCRAPE_RUN_STALE_TTL_MINUTES`, `SCRAPE_RUN_HEARTBEAT_SECONDS`, `SCRAPE_RUN_LAG_ALERT_SECONDS`).
 - `job:review-ai` now emits queue progress logging for large scans.
+  - Progress logs now include elapsed time, processing rate, ETA, and last outcome/reason context.
+- Added automated operational-noise retention pruning in vendor runs:
+  - Deletes aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
+  - Deletes aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
 
 ### Verified
 - Passing checks under Node 20:
@@ -110,3 +120,10 @@ All notable changes to Stack Tracker are documented in this file.
 - Verified networked ingestion execution in full-access mode:
   - `npm run job:vendors` succeeded (`scrapeRunId=ddf17efd-d5b7-48e9-abf3-4c601eea872f`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
   - `npm run job:finnrick` succeeded (`scrapeRunId=13073ab4-1f9b-498e-8c81-5130b0c35333`).
+- Verified alias triage throughput run:
+  - `npm run job:review-ai` completed on `2026-02-15` with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s`.
+  - Observed throughput: `82.86 items/min` (`~0.72s/item`), which is faster than the planning estimate (`~1.5s/item`) without code changes.
+  - Post-run `alias_match` queue totals: `open=516`, `in_progress=0`, `resolved=187`, `ignored=0`.
+- Verified post-key queue burn-down slices:
+  - Three 25-item slices after enabling `OPENAI_API_KEY`: `resolved=31`, `ignored=39`, `leftOpen=5`.
+  - Queue totals moved from `open=516` to `open=446` (`resolved=218`, `ignored=39`, `in_progress=0`).

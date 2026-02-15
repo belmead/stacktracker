@@ -4,6 +4,7 @@ import {
   createScrapeRun,
   finishScrapeRun,
   getActiveScrapeTargets,
+  pruneOperationalNoiseData,
   getVendorScrapeTargets,
   markVendorPageScrape,
   reconcileStaleScrapeRuns,
@@ -526,6 +527,39 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
         "Stack Tracker stale runs reconciled",
         `<p>Reconciled stale vendor scrape runs (${staleRuns.length}): ${staleRunIds.join(", ")}</p><p>TTL: ${env.SCRAPE_RUN_STALE_TTL_MINUTES} minutes</p>`
       );
+    }
+
+    const retention = await pruneOperationalNoiseData({
+      reviewQueueRetentionDays: env.REVIEW_QUEUE_RETENTION_DAYS,
+      nonTrackableAliasRetentionDays: env.NON_TRACKABLE_ALIAS_RETENTION_DAYS
+    });
+
+    if (retention.reviewQueueDeleted > 0 || retention.nonTrackableAliasesDeleted > 0) {
+      console.log(
+        `[job:vendors] retention prune removed review_queue=${retention.reviewQueueDeleted}, non_trackable_aliases=${retention.nonTrackableAliasesDeleted}`
+      );
+
+      await recordScrapeEvent({
+        scrapeRunId,
+        vendorId: null,
+        severity: "info",
+        code: "RETENTION_PRUNE",
+        message: "Pruned aged operational noise records",
+        payload: {
+          reviewQueueDeleted: retention.reviewQueueDeleted,
+          nonTrackableAliasesDeleted: retention.nonTrackableAliasesDeleted,
+          reviewQueueRetentionDays: env.REVIEW_QUEUE_RETENTION_DAYS,
+          nonTrackableAliasRetentionDays: env.NON_TRACKABLE_ALIAS_RETENTION_DAYS
+        }
+      });
+
+      await touchScrapeRunHeartbeat({
+        scrapeRunId,
+        patchSummary: {
+          retentionReviewQueueDeleted: retention.reviewQueueDeleted,
+          retentionNonTrackableAliasesDeleted: retention.nonTrackableAliasesDeleted
+        }
+      });
     }
 
     await pulseHeartbeat(true);

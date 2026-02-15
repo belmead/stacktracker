@@ -97,6 +97,9 @@ MVP goals:
 
 ### Smart matching
 - Rules-first alias matching with confidence.
+- Strip storefront noise (prices/CTA fragments/generic category text) before matching.
+- Non-product listings and blend/stack items are auto-skipped for single-compound tracking.
+- Shorthand aliases are inferred when safely mappable (for example retatrutide euphemisms such as `RT` / `GLP-3` with supporting context).
 - Unknown/low-confidence alias creates review queue item.
 - Admin alert email sent for actionable ambiguity.
 
@@ -194,8 +197,15 @@ Internal jobs:
 - Scrape runs now maintain heartbeat timestamps and auto-reconcile stale `running` runs on job start.
 - Runtime emits lag alerts when heartbeat inactivity exceeds threshold.
 - Alias resolution now includes deterministic descriptor-stripping fallback matching before AI/review.
+- Alias resolution now strips storefront noise before deterministic and AI matching.
+- Non-product/noise listings and blend/stack aliases are auto-ignored for single-compound integrity (no offer persistence).
+- Retatrutide shorthand aliases now have deterministic fallback matching to reduce avoidable review queue load.
 - Alias-review alerting now batches unresolved aliases per page and uses timeout-bounded delivery to avoid blocking scrape completion.
 - `job:review-ai` now emits progress logs while scanning large open alias queues.
+- Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
+- Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
+- After enabling `OPENAI_API_KEY`, three 25-item slices processed `75` items with `resolved=31`, `ignored=39`, `leftOpen=5`, moving queue `open` from `516` to `446`.
+- Vendor runs now prune aged operational-noise history (`review_queue` resolved/ignored + non-trackable alias rows) via retention env settings.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
 - Vendor ingestion has a recent successful run (`ddf17efd-d5b7-48e9-abf3-4c601eea872f`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`.
 - Finnrick ingestion has a recent successful run (`13073ab4-1f9b-498e-8c81-5130b0c35333`) under full-access network execution.

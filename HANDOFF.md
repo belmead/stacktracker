@@ -7,7 +7,30 @@
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
 - Most recent completed vendor run: `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersUnchanged=86`, `unresolvedAliases=90`, `aiTasksQueued=0`, ~`131.6s` runtime).
 - Most recent Finnrick run: `13073ab4-1f9b-498e-8c81-5130b0c35333` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
+- Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
+- Most recent review-ai slice run (2026-02-15, 25 items): `resolved=8`, `ignored=14`, `leftOpen=3`, `real=52.61s`.
+- Latest alias queue totals (after three 25-item slices): `open=446`, `resolved=218`, `ignored=39`, `in_progress=0`.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+
+## Tonight Update (2026-02-15, AI triage activation + queue burn-down)
+- Root cause of stalled review queue was confirmed and fixed operationally:
+  - `OPENAI_API_KEY` was missing; AI classification returned fallback and could not drain queue.
+  - Key is now configured in local environment; AI decisions are active.
+- AI triage throughput slices executed after key setup:
+  - Slice 1 (`25` items): `resolved=11`, `ignored=12`, `leftOpen=2`, `real=102.55s`.
+  - Slice 2 (`25` items): `resolved=12`, `ignored=13`, `leftOpen=0`, `real=70.97s`.
+  - Slice 3 (`25` items): `resolved=8`, `ignored=14`, `leftOpen=3`, `real=52.61s`.
+  - Combined (`75` items): `resolved=31`, `ignored=39`, `leftOpen=5`.
+  - Queue moved from `open=516` -> `open=446` in-session.
+- Alias/AI behavior updates implemented:
+  - Storefront noise stripping before alias classification (for example `Add to cart`, prices, generic category/banner text).
+  - Blend/stack detection now favors skip/non-trackable flow for single-compound offer integrity.
+  - Retatrutide shorthand handling added (for example `NG-1 RT`, `GLP-3`) to reduce avoidable manual review.
+  - Non-product listing text (for example vendor slogans/merch/storefront chrome) is auto-ignored and does not create offers/variants.
+  - `job:review-ai` progress logs now include elapsed time, rate, ETA, and last decision/reason context.
+- Operational data retention updates implemented:
+  - Vendor runs now prune aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
+  - Vendor runs now prune aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
 
 ## Schedule + Observability Update (2026-02-15)
 - Vendor cron is now daily (every 24 hours):
@@ -57,7 +80,29 @@
   - `alias_match open=580`
   - `alias_match resolved=123`
 - Operational note:
-  - `scrape_runs` still contains older `status='running'` rows from manually interrupted sessions (`412ca66d-1f3b-4eaf-a9fa-b4ca03facd38`, `450bba64-8b86-46a7-a950-d23b206f13b4`, `552ab91f-dd8c-40f8-9347-d601bf51688a`). These are historical leftovers, not active workers.
+  - Previously interrupted run IDs (`412ca66d-1f3b-4eaf-a9fa-b4ca03facd38`, `450bba64-8b86-46a7-a950-d23b206f13b4`, `552ab91f-dd8c-40f8-9347-d601bf51688a`) were reconciled by stale-run logic and are not active workers.
+
+## Review-AI Throughput Update (2026-02-15)
+- Executed to completion:
+  - `npm run job:review-ai`
+  - Runtime (`/usr/bin/time -p`): `real=420.01s` (`user=3.73s`, `sys=0.77s`)
+- Script summary:
+  - `itemsScanned=580`
+  - `resolved=64`
+  - `ignored=0`
+  - `leftOpen=516`
+- Measured throughput:
+  - `82.86 items/minute`
+  - `~0.72 seconds/item`
+- Post-run queue totals (`review_queue` where `queue_type='alias_match'`):
+  - `open=516`
+  - `in_progress=0`
+  - `resolved=187`
+  - `ignored=0`
+- Budget assessment:
+  - The planning estimate (`~1.5s/item`) is realistic for runtime throughput without code changes; observed runtime is ~2.1x faster.
+- Runtime finding:
+  - No new non-AI ingestion bottlenecks were observed in this pass; current vendor-path optimizations/observability remain the primary controls.
 
 ## Network Resolution Update (2026-02-15)
 - Root cause of prior DNS errors was identified:
@@ -264,15 +309,17 @@
 - `bpc-157` is no longer empty after the latest expanded scrape.
 - Active BPC listings now include pure BPC products from at least 2 vendors.
 - Blended BPC entries (for example BPC + TB500 blends) are now inactive for `bpc-157`.
-- `Elite Research USA` root-page extraction gap has a code-level fix (Inertia payload parsing); pending one clean vendor rerun to verify run-level counters.
+- `Elite Research USA` root-page extraction gap fix (Inertia payload parsing) is now validated by subsequent successful vendor runs.
 - `unresolvedAliases` remains high; review queue is active and expected.
+- Non-peptide/storefront-noise strings are now operationally treated as ignore-only (single-compound offers remain the only persisted catalog objects).
 - Category taxonomy mappings are now complete for curated set (`48/48` imported), but many newly seeded compounds are placeholders until scrape discovery creates active variants/offers.
 
 ## Open Risks / Remaining Work
 - AI-first compound classification now drives match/skip/review decisions; quality depends on `OPENAI_API_KEY` + model behavior.
-- Post-fix vendor run verification is still pending because one rerun stalled without final output and was manually interrupted.
-- `job:review-ai` can run for a long time on large open queues; current script has no explicit runtime guard/progress logging.
-- Vendor job runtime is still inflated by per-alias alert behavior when unresolved volume is high (many serial alert sends).
+- Vendor coverage/runtime improvements need ongoing monitoring to catch regressions as target lists expand.
+- `job:review-ai` now has progress logging and met runtime throughput targets, but it still lacks an explicit runtime cap/timeout policy for very large queues.
+- Vendor job runtime is still sensitive to unresolved alias spikes; alert sends are now batched/timeout-bounded, but high unresolved volume still increases total processing time.
+- Retatrutide shorthand inference improves coverage but may need periodic precision checks as vendor euphemisms evolve.
 - Email delivery depends on Resend sender/domain verification; local server-log fallback is available.
 - Some non-BPC compound alias quality still needs curation because unresolved volume is high.
 - Firecrawl fallback is optional and currently disabled unless `FIRECRAWL_API_KEY` is set.
@@ -282,25 +329,28 @@
 1. Re-run ingestion now that full-access DNS/network is confirmed:
    - `npm run job:vendors`
    - `npm run job:finnrick`
-   - `npm run job:review-ai`
-2. Verify impact of the new extraction + alias fixes from a clean vendor run:
+2. Re-run `npm run job:review-ai` after the next vendor scrape and compare against the new throughput baseline:
+   - baseline from 2026-02-15: `82.86 items/min` (`~0.72s/item`)
+   - compare resolution yield (`resolved/itemsScanned`) to detect queue-quality changes
+3. Verify impact of the extraction + alias fixes from each clean vendor run:
    - confirm `pagesFailed` drops from `1` to `0` (or identify remaining failed target)
    - confirm non-zero `offersCreated`/`offersUpdated`/`offersUnchanged`
-   - confirm `unresolvedAliases` trend improves from `432`
-3. Reduce ingestion runtime overhead:
-   - replace per-item unresolved alias alerts with per-vendor/per-run summaries
-   - add per-target timing logs and runtime caps for long-running review triage scripts
-4. Re-check public category UX after ingestion:
+   - confirm `unresolvedAliases` stays near or below the recent successful level (`90`)
+4. Reduce ingestion runtime overhead:
+   - add per-target timing summaries for vendor runs to isolate slow origins/pages
+   - add runtime guardrails for long-running review triage scripts
+5. Re-check public category UX after ingestion:
    - `/categories`
    - `/categories/[slug]`
    - confirm only variant-backed compounds appear and counts are sensible.
-5. Continue vendor onboarding from unresolved URL queue:
+6. Continue vendor onboarding from unresolved URL queue:
    - Precision Peptide Co
    - Amino Lair
    - UWA Elite Peptides
    - Peptide Worldwide
    - Amplified Amino
-6. Triage review queue ambiguities after AI pass (focus on true blend/alias ambiguity, ignore CTA/noise).
+7. Triage review queue ambiguities after AI pass (focus on true blend/alias ambiguity, ignore CTA/noise).
+8. Periodically sample ignored decisions to confirm shorthand/noise heuristics remain precise as vendor copy changes.
 
 ## Verification Checklist (Mapped To Your Commentary)
 1. Homepage metric scope

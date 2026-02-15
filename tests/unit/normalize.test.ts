@@ -26,4 +26,10 @@ describe("parseProductName", () => {
     expect(parsed.compoundRawName).toContain("Wolverine Blend");
     expect(parsed.compoundRawName).toContain("TB500");
   });
+
+  it("strips storefront noise from inferred alias text", () => {
+    const parsed = parseProductName("US Finished NG-1 RT $500.00 Add to Cart Add to cart");
+
+    expect(parsed.compoundRawName).toBe("NG-1 RT");
+  });
 });

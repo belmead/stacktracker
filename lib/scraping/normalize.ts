@@ -1,4 +1,5 @@
 import type { ExtractedOffer, NormalizedVariant } from "@/lib/types";
+import { stripStorefrontNoise } from "@/lib/alias/normalize";
 
 export interface ParsedProductName {
   compoundRawName: string;
@@ -39,7 +40,7 @@ export function detectFormulation(productName: string): { code: string; label: s
 }
 
 export function inferCompoundRawName(productName: string): string {
-  return normalizeWhitespace(productName).slice(0, 120);
+  return normalizeWhitespace(stripStorefrontNoise(productName)).slice(0, 120);
 }
 
 function parsePackageQuantity(text: string): { quantity: number | null; unit: string | null } {

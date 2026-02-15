@@ -26,6 +26,9 @@ Primary docs:
   - Per-origin API discovery caching to avoid redundant Woo/Shopify probes across repeated vendor page targets.
   - Duplicate API-origin persistence short-circuit (reuse discovery payload once per vendor/source/origin in a run).
   - Standards-first extraction from embedded page data (`schema.org` JSON-LD plus Inertia `data-page` payloads) when present.
+  - Alias triage strips storefront/CTA noise and price fragments before deterministic and AI matching.
+  - Non-product listings and blend/stack products are auto-skipped for single-compound tracking integrity.
+  - Retatrutide shorthand (for example `RT`, `GLP-3`, `NG-1 RT`) is recognized to reduce avoidable manual review.
   - 24-hour Finnrick sync with `N/A` fallback.
   - Safe-mode robots policy handling.
   - AI-agent fallback task queue for blocked/empty pages.
@@ -83,7 +86,7 @@ Optional while domain is not purchased yet:
 - In local non-production, submitting admin login prints the magic link in server logs.
 - Keep `SCRAPER_USER_AGENT` quoted if it contains spaces/parentheses.
 - Do not `source .env.local` manually; npm scripts load it automatically.
-- Set `OPENAI_API_KEY` to enable AI-based product/alias classification.
+- Set `OPENAI_API_KEY` to enable AI-based product/alias classification (required if you expect `job:review-ai` to drain unresolved queue items).
 - Optional: set `OPENAI_MODEL` (default: `gpt-5-mini`).
 - Optional: set `FIRECRAWL_API_KEY` to enable managed rendering/extraction fallback.
 - Optional runtime tuning:
@@ -91,6 +94,8 @@ Optional while domain is not purchased yet:
   - `SCRAPE_RUN_STALE_TTL_MINUTES` (default `30`)
   - `SCRAPE_RUN_HEARTBEAT_SECONDS` (default `20`)
   - `SCRAPE_RUN_LAG_ALERT_SECONDS` (default `120`)
+  - `REVIEW_QUEUE_RETENTION_DAYS` (default `45`, prunes aged `resolved`/`ignored` review rows)
+  - `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`, prunes aged non-trackable alias memory where `compound_id` is null)
 
 4. Bootstrap DB schema and seed:
 
@@ -133,10 +138,12 @@ npm run job:review-ai
 ```
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
+If `OPENAI_API_KEY` is missing, AI classification falls back and queue burn-down quality drops sharply.
 
 Runtime observability:
 - `job:vendors` now emits run-level, page-level, and offer-level progress logs.
-- `job:review-ai` now emits queue-size and progress counters while scanning.
+- `job:review-ai` now emits queue-size progress with elapsed time, throughput, ETA, and last decision/reason context.
+- Baseline full review-ai run (`2026-02-15`, pre-key fix): `580` items scanned in `420.01s` (`82.86 items/min`, `~0.72s/item`) with `resolved=64`, `ignored=0`, `leftOpen=516`.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -221,9 +228,17 @@ npm run test
 - Latest verified networked ingestion runs:
   - `npm run job:vendors` succeeded with run `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
   - `npm run job:finnrick` succeeded with run `13073ab4-1f9b-498e-8c81-5130b0c35333`.
+- Latest `job:review-ai` completion (`2026-02-15`):
+  - Baseline full run summary (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
+  - After enabling `OPENAI_API_KEY`, three 25-item slices processed `75` items with `resolved=31`, `ignored=39`, `leftOpen=5`.
+  - Queue totals now (`alias_match`): `open=446`, `in_progress=0`, `resolved=218`, `ignored=39`.
+- Alias policy now avoids database clutter from non-peptide noise:
+  - Non-trackable storefront noise and merch are ignored (not persisted as offers/variants).
+  - Aged ignored/resolved review rows and non-trackable alias memory are pruned automatically by retention settings.
 - Job reliability hardening is in place:
   - Stale `running` scrape runs are auto-reconciled to `failed` after TTL.
   - Scrape runs persist heartbeat timestamps and emit lag alerts.
+  - Vendor runs automatically prune aged operational noise records (`review_queue` resolved/ignored history + stale non-trackable alias memory) using retention env defaults.
 - Remaining launch blockers are infrastructure setup tasks:
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars
