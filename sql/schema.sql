@@ -106,10 +106,14 @@ create table if not exists scrape_runs (
   scrape_mode text not null check (scrape_mode in ('safe', 'aggressive_manual')),
   status text not null check (status in ('running', 'success', 'partial', 'failed')),
   started_at timestamptz not null default now(),
+  heartbeat_at timestamptz not null default now(),
   finished_at timestamptz,
   triggered_by text,
   summary jsonb not null default '{}'::jsonb
 );
+
+alter table if exists scrape_runs
+  add column if not exists heartbeat_at timestamptz not null default now();
 
 create table if not exists scrape_events (
   id uuid primary key default gen_random_uuid(),
@@ -279,6 +283,7 @@ create index if not exists idx_offers_current_variant_price_mg on offers_current
 create index if not exists idx_offer_history_variant_effective on offer_history(variant_id, effective_from);
 create index if not exists idx_review_queue_status on review_queue(status, created_at);
 create index if not exists idx_scrape_runs_job_type_started on scrape_runs(job_type, started_at desc);
+create index if not exists idx_scrape_runs_status_heartbeat on scrape_runs(status, heartbeat_at asc);
 create index if not exists idx_scrape_events_run on scrape_events(scrape_run_id);
 create index if not exists idx_scrape_requests_status on scrape_requests(status, created_at);
 create index if not exists idx_ai_agent_tasks_status on ai_agent_tasks(status, created_at);

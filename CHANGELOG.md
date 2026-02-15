@@ -59,6 +59,9 @@ All notable changes to Stack Tracker are documented in this file.
   - `tests/unit/alias-normalize.test.ts` validates descriptor stripping for dosage/formulation suffixes while preserving ambiguous blend terms.
 - HTML extraction regression test:
   - `tests/unit/extractors.test.ts` now validates Inertia `data-page` extraction for product+variant payloads.
+- Discovery/runtime regression tests:
+  - `tests/unit/discovery.test.ts` now validates per-origin API cache reuse and unsupported-origin memoization.
+  - `tests/unit/worker-alerts.test.ts` validates batched alias-alert HTML formatting/truncation.
 
 ### Changed
 - Floating nav category selector now routes to category pages before compound selection.
@@ -87,6 +90,17 @@ All notable changes to Stack Tracker are documented in this file.
 - Alias resolution now attempts deterministic stripped-name matching (removing dosage/formulation descriptors like `10mg`, `vial`, `capsules`) before falling back to AI/review, improving auto-match coverage when base compounds already exist.
 - Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
+- Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
+- Discovery now caches Woo/Shopify API results per origin and records source-origin reuse; duplicate API-origin pages in the same run skip redundant offer persistence.
+- Vendor cron cadence was updated from every 6 hours to every 24 hours (`vercel.json` now schedules `/api/internal/jobs/vendors` daily at `00:00` UTC).
+- Vendor scrape runtime now emits page-level progress logs (start/completion + per-page deltas) so long-running runs remain observable in stdout.
+- Peptide detail hero subhead now includes live coverage counts (`vendors` and `variations`) for the current compound.
+- `scrape_runs` now stores `heartbeat_at` and jobs maintain heartbeat updates while running.
+- Added stale-run reconciliation for scrape jobs: aged `running` runs are marked `failed` after TTL at job start.
+- Added lag-alert events/email when heartbeat inactivity exceeds configured threshold.
+- Vendor scrape worker now uses bounded page concurrency (`VENDOR_SCRAPE_CONCURRENCY`, default `2`, max `3`).
+- Added optional runtime controls in env (`VENDOR_SCRAPE_CONCURRENCY`, `SCRAPE_RUN_STALE_TTL_MINUTES`, `SCRAPE_RUN_HEARTBEAT_SECONDS`, `SCRAPE_RUN_LAG_ALERT_SECONDS`).
+- `job:review-ai` now emits queue progress logging for large scans.
 
 ### Verified
 - Passing checks under Node 20:
@@ -94,4 +108,5 @@ All notable changes to Stack Tracker are documented in this file.
   - `npm run lint`
   - `npm run test`
 - Verified networked ingestion execution in full-access mode:
-  - `npm run job:finnrick` succeeded (`scrapeRunId=ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`).
+  - `npm run job:vendors` succeeded (`scrapeRunId=ddf17efd-d5b7-48e9-abf3-4c601eea872f`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
+  - `npm run job:finnrick` succeeded (`scrapeRunId=13073ab4-1f9b-498e-8c81-5130b0c35333`).

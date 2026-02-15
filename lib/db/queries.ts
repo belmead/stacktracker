@@ -16,6 +16,35 @@ import type {
 } from "@/lib/types";
 
 const toJson = (value: unknown) => sql.json(value as JSONValue);
+let scrapeRunsHeartbeatReady: Promise<void> | null = null;
+
+async function ensureScrapeRunsHeartbeatColumn(): Promise<void> {
+  if (!scrapeRunsHeartbeatReady) {
+    scrapeRunsHeartbeatReady = (async () => {
+      const rows = await sql<{ exists: boolean }[]>`
+        select exists (
+          select 1
+          from information_schema.columns
+          where
+            table_schema = 'public'
+            and table_name = 'scrape_runs'
+            and column_name = 'heartbeat_at'
+        )
+      `;
+
+      if (rows[0]?.exists) {
+        return;
+      }
+
+      await sql`
+        alter table if exists scrape_runs
+        add column heartbeat_at timestamptz not null default now()
+      `;
+    })();
+  }
+
+  await scrapeRunsHeartbeatReady;
+}
 
 const HOME_IMAGE_PLACEHOLDER = "https://images.unsplash.com/photo-1471864190281-a93a3070b6de?auto=format&fit=crop&w=1400&q=80";
 
@@ -310,6 +339,27 @@ export async function getCompoundBySlug(slug: string): Promise<CompoundDetails |
   `;
 
   return rows[0] ?? null;
+}
+
+export interface CompoundCoverageStats {
+  vendorCount: number;
+  variationCount: number;
+}
+
+export async function getCompoundCoverageStats(compoundId: string): Promise<CompoundCoverageStats> {
+  const rows = await sql<CompoundCoverageStats[]>`
+    select
+      count(distinct oc.vendor_id)::int as vendor_count,
+      count(distinct oc.variant_id)::int as variation_count
+    from offers_current oc
+    inner join compound_variants cv on cv.id = oc.variant_id
+    where
+      cv.compound_id = ${compoundId}
+      and cv.is_active = true
+      and oc.is_available = true
+  `;
+
+  return rows[0] ?? { vendorCount: 0, variationCount: 0 };
 }
 
 export interface VariantFilterOption {
@@ -746,13 +796,24 @@ export async function createScrapeRun(input: {
   scrapeMode: ScrapeMode;
   triggeredBy: string | null;
 }): Promise<string> {
+  await ensureScrapeRunsHeartbeatColumn();
+
   const rows = await sql<
     {
       id: string;
     }[]
   >`
-    insert into scrape_runs (job_type, run_mode, scrape_mode, status, started_at, triggered_by)
-    values (${input.jobType}, ${input.runMode}, ${input.scrapeMode}, 'running', now(), ${input.triggeredBy})
+    insert into scrape_runs (job_type, run_mode, scrape_mode, status, started_at, heartbeat_at, triggered_by, summary)
+    values (
+      ${input.jobType},
+      ${input.runMode},
+      ${input.scrapeMode},
+      'running',
+      now(),
+      now(),
+      ${input.triggeredBy},
+      jsonb_build_object('heartbeatEnabled', true)
+    )
     returning id
   `;
 
@@ -764,10 +825,116 @@ export async function finishScrapeRun(input: {
   status: ScrapeStatus;
   summary: Record<string, unknown>;
 }): Promise<void> {
+  await ensureScrapeRunsHeartbeatColumn();
+
   await sql`
     update scrape_runs
-    set status = ${input.status}, summary = ${toJson(input.summary)}, finished_at = now()
+    set status = ${input.status}, summary = ${toJson(input.summary)}, heartbeat_at = now(), finished_at = now()
     where id = ${input.scrapeRunId}
+  `;
+}
+
+export async function touchScrapeRunHeartbeat(input: {
+  scrapeRunId: string;
+  patchSummary?: Record<string, unknown> | null;
+}): Promise<void> {
+  await ensureScrapeRunsHeartbeatColumn();
+
+  if (input.patchSummary && Object.keys(input.patchSummary).length > 0) {
+    await sql`
+      update scrape_runs
+      set heartbeat_at = now(),
+          summary = coalesce(summary, '{}'::jsonb) || ${toJson(input.patchSummary)}
+      where id = ${input.scrapeRunId} and status = 'running'
+    `;
+    return;
+  }
+
+  await sql`
+    update scrape_runs
+    set heartbeat_at = now()
+    where id = ${input.scrapeRunId} and status = 'running'
+  `;
+}
+
+export interface ReconciledScrapeRun {
+  id: string;
+  jobType: JobType;
+  runMode: JobRunMode;
+  scrapeMode: ScrapeMode;
+  startedAt: string;
+  heartbeatAt: string | null;
+  triggeredBy: string | null;
+}
+
+export async function reconcileStaleScrapeRuns(input: {
+  staleTtlMinutes: number;
+  reason: string;
+  jobType?: JobType;
+  excludeScrapeRunId?: string;
+}): Promise<ReconciledScrapeRun[]> {
+  await ensureScrapeRunsHeartbeatColumn();
+  const jobTypeFilter = input.jobType ? sql`and job_type = ${input.jobType}` : sql``;
+  const excludeRunFilter = input.excludeScrapeRunId ? sql`and id <> ${input.excludeScrapeRunId}` : sql``;
+
+  return sql<ReconciledScrapeRun[]>`
+    with stale as (
+      select
+        id,
+        job_type,
+        run_mode,
+        scrape_mode,
+        started_at,
+        heartbeat_at,
+        triggered_by
+      from scrape_runs
+      where
+        status = 'running'
+        ${jobTypeFilter}
+        ${excludeRunFilter}
+        and (
+          (
+            coalesce((summary ->> 'heartbeatEnabled')::boolean, false) = true
+            and coalesce(heartbeat_at, started_at) <= now() - make_interval(mins => ${input.staleTtlMinutes}::int)
+          )
+          or (
+            coalesce((summary ->> 'heartbeatEnabled')::boolean, false) = false
+            and started_at <= now() - make_interval(mins => ${input.staleTtlMinutes}::int)
+          )
+        )
+    ),
+    updated as (
+      update scrape_runs sr
+      set
+        status = 'failed',
+        finished_at = now(),
+        heartbeat_at = now(),
+        summary = coalesce(sr.summary, '{}'::jsonb) || jsonb_build_object(
+          'staleFailureReason', ${input.reason}::text,
+          'staleFailedAt', now(),
+          'staleTtlMinutes', ${input.staleTtlMinutes}::int
+        )
+      from stale
+      where sr.id = stale.id
+      returning
+        stale.id,
+        stale.job_type,
+        stale.run_mode,
+        stale.scrape_mode,
+        stale.started_at,
+        stale.heartbeat_at,
+        stale.triggered_by
+    )
+    select
+      id,
+      job_type,
+      run_mode,
+      scrape_mode,
+      started_at,
+      heartbeat_at,
+      triggered_by
+    from updated
+    order by started_at asc
   `;
 }
 

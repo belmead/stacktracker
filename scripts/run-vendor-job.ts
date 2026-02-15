@@ -2,12 +2,14 @@ import { runVendorScrapeJob } from "@/lib/scraping/worker";
 import { sql } from "@/lib/db/client";
 
 async function main(): Promise<void> {
+  console.log("[job:vendors] launching manual safe scrape run...");
   const result = await runVendorScrapeJob({
     runMode: "manual",
     scrapeMode: "safe",
     triggeredBy: "local_script"
   });
 
+  console.log("[job:vendors] scrape run complete.");
   console.log(JSON.stringify(result, null, 2));
 }
 

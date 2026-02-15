@@ -5,9 +5,59 @@
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `b307de3e-62ce-4958-a35b-62f1d9fa9fe8` (`pagesTotal=10`, `pagesSuccess=9`, `pagesFailed=1`, `unresolvedAliases=432`, `aiTasksQueued=1`).
-- Most recent Finnrick run: `ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
+- Most recent completed vendor run: `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersUnchanged=86`, `unresolvedAliases=90`, `aiTasksQueued=0`, ~`131.6s` runtime).
+- Most recent Finnrick run: `13073ab4-1f9b-498e-8c81-5130b0c35333` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+
+## Schedule + Observability Update (2026-02-15)
+- Vendor cron is now daily (every 24 hours):
+  - `vercel.json` schedule changed from `0 */6 * * *` to `0 0 * * *` for `/api/internal/jobs/vendors`.
+- Vendor job logging now emits run start/finish, per-page progress lines, and periodic offer-progress heartbeats:
+  - Useful to distinguish "actively processing" vs "stalled" during long network-bound runs.
+- `job:review-ai` now emits queue scan/progress counters while processing alias review items.
+- Peptide detail subhead now includes compound coverage counts:
+  - `<vendors> · <variations>` for quick availability context.
+
+## Reliability Mitigation Update (2026-02-15)
+- Implemented stale-run reconciler:
+  - `running` scrape runs older than `SCRAPE_RUN_STALE_TTL_MINUTES` are marked `failed` at job start.
+  - Legacy pre-heartbeat runs are reconciled via `started_at` age; heartbeat-enabled runs use `heartbeat_at`.
+- Implemented lightweight run heartbeat + lag alerts:
+  - `scrape_runs.heartbeat_at` updates during active runs.
+  - Lag alert event + admin alert fire when inactivity exceeds `SCRAPE_RUN_LAG_ALERT_SECONDS`.
+- Implemented bounded vendor-page concurrency:
+  - `VENDOR_SCRAPE_CONCURRENCY` env (default `2`, max `3`).
+  - Current run behavior is 2-worker parallel page processing with deterministic summary aggregation.
+- Verified reconciler behavior in-session:
+  - Reconciled stale runs: `b9e031ec-2e59-4d33-8e5a-2cef3d362c27`, `412ca66d-1f3b-4eaf-a9fa-b4ca03facd38`, `450bba64-8b86-46a7-a950-d23b206f13b4`, `552ab91f-dd8c-40f8-9347-d601bf51688a`.
+- Note:
+  - Additional recently interrupted runs may remain `running` until they cross TTL, then auto-reconcile on next job start.
+
+## Runtime Bottleneck Update (2026-02-15)
+- Reruns executed:
+  - `npm run job:vendors` completed successfully with run `168dd6a9-face-4cb4-aa34-6d1ae0e759ed`.
+  - `npm run job:review-ai` was started but did not complete in-session (large open alias queue; see below).
+- Delta vs baseline vendor run `b307de3e-62ce-4958-a35b-62f1d9fa9fe8`:
+  - Status: `partial` -> `success`
+  - Duration: `490s` -> `198s` (292s faster, ~59.6% reduction)
+  - `pagesFailed`: `1` -> `0`
+  - `aiTasksQueued`: `1` -> `0`
+  - `unresolvedAliases`: `432` -> `90` (342 fewer, ~79.2% reduction)
+  - `offersUnchanged`: `0` -> `86`
+- Runtime fixes implemented:
+  - Batched unresolved-alias admin alerts to one email per page instead of one email per alias.
+  - Added bounded alert delivery (`12s` timeout wrapper) so alert transport issues do not stall ingestion.
+  - Added per-origin discovery cache for Woo/Shopify API outcomes to avoid redundant probes on repeated origins.
+  - Added duplicate API-origin short-circuit in worker to skip re-persisting the same discovered catalog payload across multiple page targets.
+- Verification from scrape events (`168dd6a9-face-4cb4-aa34-6d1ae0e759ed`):
+  - `DISCOVERY_SOURCE=10`
+  - `DISCOVERY_REUSED_ORIGIN=7`
+  - `UNKNOWN_ALIAS=90`
+- Review queue snapshot after attempted `job:review-ai`:
+  - `alias_match open=580`
+  - `alias_match resolved=123`
+- Operational note:
+  - `scrape_runs` still contains older `status='running'` rows from manually interrupted sessions (`412ca66d-1f3b-4eaf-a9fa-b4ca03facd38`, `450bba64-8b86-46a7-a950-d23b206f13b4`, `552ab91f-dd8c-40f8-9347-d601bf51688a`). These are historical leftovers, not active workers.
 
 ## Network Resolution Update (2026-02-15)
 - Root cause of prior DNS errors was identified:

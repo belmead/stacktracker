@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 
 import { sendAdminAlert } from "@/lib/alerts";
 import { listVendorsForRatingSync, upsertFinnrickRating } from "@/lib/db/mutations";
-import { createScrapeRun, finishScrapeRun, recordScrapeEvent } from "@/lib/db/queries";
+import { createScrapeRun, finishScrapeRun, reconcileStaleScrapeRuns, recordScrapeEvent, touchScrapeRunHeartbeat } from "@/lib/db/queries";
 import { env } from "@/lib/env";
 
 function normalizeName(input: string): string {
@@ -61,7 +61,24 @@ function parseFinnrickRows(html: string): Array<{ vendorName: string; rating: nu
   return rows;
 }
 
+async function sendAdminAlertWithTimeout(subject: string, html: string): Promise<void> {
+  const timeoutMs = 12_000;
+  const timeoutPromise = new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs);
+  });
+
+  try {
+    await Promise.race([sendAdminAlert(subject, html), timeoutPromise]);
+  } catch (error) {
+    console.warn("[job:finnrick] failed to send admin alert", {
+      subject,
+      error: error instanceof Error ? error.message : "unknown"
+    });
+  }
+}
+
 export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summary: Record<string, unknown> }> {
+  const runStartedAt = Date.now();
   const scrapeRunId = await createScrapeRun({
     jobType: "finnrick",
     runMode: "scheduled",
@@ -75,8 +92,92 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
     ratingsUpdated: 0,
     notFound: 0
   };
+  const heartbeatIntervalMs = env.SCRAPE_RUN_HEARTBEAT_SECONDS * 1000;
+  const lagAlertThresholdMs = env.SCRAPE_RUN_LAG_ALERT_SECONDS * 1000;
+  let lastProgressAt = Date.now();
+  let heartbeatInFlight = false;
+  let lagAlertSent = false;
+
+  const heartbeatTimer = setInterval(() => {
+    void pulseHeartbeat();
+  }, heartbeatIntervalMs);
+  heartbeatTimer.unref?.();
+
+  function markProgress(): void {
+    lastProgressAt = Date.now();
+  }
+
+  async function pulseHeartbeat(force = false): Promise<void> {
+    if (heartbeatInFlight && !force) {
+      return;
+    }
+
+    heartbeatInFlight = true;
+    try {
+      await touchScrapeRunHeartbeat({ scrapeRunId });
+
+      const lagMs = Date.now() - lastProgressAt;
+      if (lagMs >= lagAlertThresholdMs && !lagAlertSent) {
+        lagAlertSent = true;
+        await recordScrapeEvent({
+          scrapeRunId,
+          vendorId: null,
+          severity: "warn",
+          code: "RUN_HEARTBEAT_LAG",
+          message: `Finnrick sync lag exceeded ${env.SCRAPE_RUN_LAG_ALERT_SECONDS}s`,
+          payload: {
+            lagMs,
+            lagSeconds: Math.round(lagMs / 1000)
+          }
+        });
+
+        await sendAdminAlertWithTimeout(
+          "Stack Tracker Finnrick run lag detected",
+          `<p>Run ID: ${scrapeRunId}</p><p>Lag: ${Math.round(lagMs / 1000)}s</p>`
+        );
+      } else if (lagMs < lagAlertThresholdMs) {
+        lagAlertSent = false;
+      }
+    } catch (error) {
+      console.warn("[job:finnrick] heartbeat update failed", {
+        scrapeRunId,
+        error: error instanceof Error ? error.message : "unknown"
+      });
+    } finally {
+      heartbeatInFlight = false;
+    }
+  }
 
   try {
+    markProgress();
+    const staleRuns = await reconcileStaleScrapeRuns({
+      staleTtlMinutes: env.SCRAPE_RUN_STALE_TTL_MINUTES,
+      reason: "finnrick_stale_reconciler",
+      jobType: "finnrick",
+      excludeScrapeRunId: scrapeRunId
+    });
+
+    if (staleRuns.length > 0) {
+      const staleRunIds = staleRuns.map((run) => run.id);
+      console.warn(
+        `[job:finnrick] reconciled ${staleRuns.length} stale run(s): ${staleRunIds.join(", ")}`
+      );
+
+      await recordScrapeEvent({
+        scrapeRunId,
+        vendorId: null,
+        severity: "warn",
+        code: "STALE_RUN_RECONCILED",
+        message: `Marked ${staleRuns.length} stale Finnrick run(s) as failed`,
+        payload: {
+          staleTtlMinutes: env.SCRAPE_RUN_STALE_TTL_MINUTES,
+          staleRunIds
+        }
+      });
+    }
+
+    await pulseHeartbeat(true);
+
     const response = await fetch(env.FINNRICK_VENDORS_URL, {
       headers: {
         "user-agent": env.SCRAPER_USER_AGENT,
@@ -96,8 +197,11 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
 
     const vendors = await listVendorsForRatingSync();
     summary.vendorsTotal = vendors.length;
+    markProgress();
+    await pulseHeartbeat(true);
 
     for (const vendor of vendors) {
+      markProgress();
       const normalizedVendor = normalizeName(vendor.name);
       const row = byName.get(normalizedVendor);
 
@@ -133,6 +237,10 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
       summary
     });
 
+    console.log(
+      `[job:finnrick] run ${scrapeRunId} completed in ${Math.round((Date.now() - runStartedAt) / 1000)}s`
+    );
+
     return { scrapeRunId, summary };
   } catch (error) {
     const errorMessage =
@@ -162,11 +270,14 @@ export async function runFinnrickSyncJob(): Promise<{ scrapeRunId: string; summa
       }
     });
 
-    await sendAdminAlert(
+    await sendAdminAlertWithTimeout(
       "Stack Tracker Finnrick sync failed",
       `<p>The Finnrick ratings sync failed.</p><p>Error: ${errorMessage}</p>`
     );
 
     throw new Error(errorMessage);
+  } finally {
+    clearInterval(heartbeatTimer);
+    await pulseHeartbeat(true);
   }
 }

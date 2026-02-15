@@ -18,10 +18,47 @@ export interface DiscoveryAttempt {
   error?: string;
 }
 
+type ApiDiscoverySource = "woocommerce_store_api" | "shopify_products_api";
+
 export interface DiscoveryResult {
   offers: ExtractedOffer[];
   source: string | null;
+  origin: string | null;
   attempts: DiscoveryAttempt[];
+}
+
+interface CachedApiOffer {
+  productUrl: string;
+  productName: string;
+  compoundRawName: string;
+  formulationRaw: string | null;
+  sizeRaw: string | null;
+  currencyCode: "USD";
+  listPriceCents: number;
+  available: boolean;
+  rawPayload: Record<string, unknown>;
+}
+
+interface CachedApiResult {
+  source: ApiDiscoverySource;
+  offers: CachedApiOffer[];
+}
+
+export interface DiscoveryCache {
+  apiResultsByOrigin: Map<string, CachedApiResult>;
+  unsupportedSourcesByOrigin: Map<string, Set<ApiDiscoverySource>>;
+}
+
+interface SourceExtractionResult {
+  offers: ExtractedOffer[];
+  origin: string | null;
+}
+
+export function createDiscoveryCache(): DiscoveryCache {
+  return {
+    apiResultsByOrigin: new Map(),
+    unsupportedSourcesByOrigin: new Map()
+  };
 }
 
 interface FetchJsonResult {
@@ -161,6 +198,71 @@ function dedupeOffers(offers: ExtractedOffer[]): ExtractedOffer[] {
   return deduped;
 }
 
+function toCachedApiOffers(offers: ExtractedOffer[]): CachedApiOffer[] {
+  return offers.map((offer) => ({
+    productUrl: offer.productUrl,
+    productName: offer.productName,
+    compoundRawName: offer.compoundRawName,
+    formulationRaw: offer.formulationRaw,
+    sizeRaw: offer.sizeRaw,
+    currencyCode: offer.currencyCode,
+    listPriceCents: offer.listPriceCents,
+    available: offer.available,
+    rawPayload: offer.rawPayload
+  }));
+}
+
+function fromCachedApiOffers(input: {
+  target: DiscoveryTarget;
+  offers: CachedApiOffer[];
+}): ExtractedOffer[] {
+  return input.offers.map((offer) => ({
+    vendorPageId: input.target.vendorPageId,
+    vendorId: input.target.vendorId,
+    pageUrl: input.target.pageUrl,
+    productUrl: offer.productUrl,
+    productName: offer.productName,
+    compoundRawName: offer.compoundRawName,
+    formulationRaw: offer.formulationRaw,
+    sizeRaw: offer.sizeRaw,
+    currencyCode: offer.currencyCode,
+    listPriceCents: offer.listPriceCents,
+    available: offer.available,
+    rawPayload: offer.rawPayload
+  }));
+}
+
+function cacheUnsupportedSource(input: {
+  cache?: DiscoveryCache;
+  origin: string;
+  source: ApiDiscoverySource;
+}): void {
+  if (!input.cache) {
+    return;
+  }
+
+  const existing = input.cache.unsupportedSourcesByOrigin.get(input.origin);
+  if (existing) {
+    existing.add(input.source);
+    return;
+  }
+
+  input.cache.unsupportedSourcesByOrigin.set(input.origin, new Set([input.source]));
+}
+
+function isSourceUnsupported(input: {
+  cache?: DiscoveryCache;
+  origin: string;
+  source: ApiDiscoverySource;
+}): boolean {
+  const unsupported = input.cache?.unsupportedSourcesByOrigin.get(input.origin);
+  return unsupported?.has(input.source) ?? false;
+}
+
+function isDefinitiveUnsupportedStatus(status: number): boolean {
+  return status === 401 || status === 403 || status === 404 || status === 410;
+}
+
 export function offersFromWooCommercePayload(input: {
   payload: unknown;
   target: DiscoveryTarget;
@@ -294,10 +396,32 @@ export function offersFromShopifyPayload(input: {
   return dedupeOffers(offers);
 }
 
-async function extractFromWooCommerceApi(target: DiscoveryTarget): Promise<ExtractedOffer[]> {
+async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: DiscoveryCache): Promise<SourceExtractionResult> {
   const origins = urlOrigins(target);
   for (const origin of origins) {
+    const cached = cache?.apiResultsByOrigin.get(origin);
+    if (cached?.source === "woocommerce_store_api") {
+      return {
+        offers: fromCachedApiOffers({
+          target,
+          offers: cached.offers
+        }),
+        origin
+      };
+    }
+
+    if (
+      isSourceUnsupported({
+        cache,
+        origin,
+        source: "woocommerce_store_api"
+      })
+    ) {
+      continue;
+    }
+
     const collected: ExtractedOffer[] = [];
+    let definitiveUnsupported = false;
 
     for (let page = 1; page <= 3; page += 1) {
       const endpoint = new URL("/wp-json/wc/store/v1/products", origin);
@@ -305,7 +429,8 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget): Promise<Extra
       endpoint.searchParams.set("page", String(page));
 
       const result = await fetchJson(endpoint.toString());
-      if (result.status === 404) {
+      if (isDefinitiveUnsupportedStatus(result.status)) {
+        definitiveUnsupported = true;
         break;
       }
 
@@ -333,21 +458,68 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget): Promise<Extra
 
     const deduped = dedupeOffers(collected);
     if (deduped.length > 0) {
-      return deduped;
+      cache?.apiResultsByOrigin.set(origin, {
+        source: "woocommerce_store_api",
+        offers: toCachedApiOffers(deduped)
+      });
+
+      return {
+        offers: deduped,
+        origin
+      };
+    }
+
+    if (definitiveUnsupported) {
+      cacheUnsupportedSource({
+        cache,
+        origin,
+        source: "woocommerce_store_api"
+      });
     }
   }
 
-  return [];
+  return {
+    offers: [],
+    origin: null
+  };
 }
 
-async function extractFromShopifyApi(target: DiscoveryTarget): Promise<ExtractedOffer[]> {
+async function extractFromShopifyApi(target: DiscoveryTarget, cache?: DiscoveryCache): Promise<SourceExtractionResult> {
   const origins = urlOrigins(target);
   for (const origin of origins) {
+    const cached = cache?.apiResultsByOrigin.get(origin);
+    if (cached?.source === "shopify_products_api") {
+      return {
+        offers: fromCachedApiOffers({
+          target,
+          offers: cached.offers
+        }),
+        origin
+      };
+    }
+
+    if (
+      isSourceUnsupported({
+        cache,
+        origin,
+        source: "shopify_products_api"
+      })
+    ) {
+      continue;
+    }
+
     const endpoint = new URL("/products.json", origin);
     endpoint.searchParams.set("limit", "250");
 
     const result = await fetchJson(endpoint.toString());
     if (result.status >= 400) {
+      if (isDefinitiveUnsupportedStatus(result.status)) {
+        cacheUnsupportedSource({
+          cache,
+          origin,
+          source: "shopify_products_api"
+        });
+      }
       continue;
     }
 
@@ -357,11 +529,23 @@ async function extractFromShopifyApi(target: DiscoveryTarget): Promise<Extracted
     });
 
     if (offers.length > 0) {
-      return offers;
+      const deduped = dedupeOffers(offers);
+      cache?.apiResultsByOrigin.set(origin, {
+        source: "shopify_products_api",
+        offers: toCachedApiOffers(deduped)
+      });
+
+      return {
+        offers: deduped,
+        origin
+      };
     }
   }
 
-  return [];
+  return {
+    offers: [],
+    origin: null
+  };
 }
 
 async function scrapeHtmlWithFirecrawl(pageUrl: string): Promise<string | null> {
@@ -417,11 +601,13 @@ async function scrapeHtmlWithFirecrawl(pageUrl: string): Promise<string | null> 
 export async function discoverOffers(input: {
   target: DiscoveryTarget;
   fetchPageHtml: (pageUrl: string) => Promise<string>;
+  cache?: DiscoveryCache;
 }): Promise<DiscoveryResult> {
   const attempts: DiscoveryAttempt[] = [];
 
   try {
-    const wooOffers = await extractFromWooCommerceApi(input.target);
+    const wooResult = await extractFromWooCommerceApi(input.target, input.cache);
+    const wooOffers = wooResult.offers;
     attempts.push({
       source: "woocommerce_store_api",
       success: wooOffers.length > 0,
@@ -431,6 +617,7 @@ export async function discoverOffers(input: {
       return {
         offers: wooOffers,
         source: "woocommerce_store_api",
+        origin: wooResult.origin,
         attempts
       };
     }
@@ -444,7 +631,8 @@ export async function discoverOffers(input: {
   }
 
   try {
-    const shopifyOffers = await extractFromShopifyApi(input.target);
+    const shopifyResult = await extractFromShopifyApi(input.target, input.cache);
+    const shopifyOffers = shopifyResult.offers;
     attempts.push({
       source: "shopify_products_api",
       success: shopifyOffers.length > 0,
@@ -454,6 +642,7 @@ export async function discoverOffers(input: {
       return {
         offers: shopifyOffers,
         source: "shopify_products_api",
+        origin: shopifyResult.origin,
         attempts
       };
     }
@@ -483,6 +672,7 @@ export async function discoverOffers(input: {
       return {
         offers: htmlOffers,
         source: "html",
+        origin: null,
         attempts
       };
     }
@@ -520,6 +710,7 @@ export async function discoverOffers(input: {
           return {
             offers: firecrawlOffers,
             source: "firecrawl",
+            origin: null,
             attempts
           };
         }
@@ -537,6 +728,7 @@ export async function discoverOffers(input: {
   return {
     offers: [],
     source: null,
+    origin: null,
     attempts
   };
 }

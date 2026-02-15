@@ -5,6 +5,7 @@ import { FloatingNav } from "@/components/floating-nav";
 import { TrendChart } from "@/components/trend-chart";
 import {
   getCompoundBySlug,
+  getCompoundCoverageStats,
   getCompoundSelectorOptions,
   getDefaultVariantId,
   getOffersForVariant,
@@ -57,10 +58,11 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
     notFound();
   }
 
-  const [compounds, variantFilters, defaultVariantId] = await Promise.all([
+  const [compounds, variantFilters, defaultVariantId, coverage] = await Promise.all([
     getCompoundSelectorOptions(),
     getVariantFilters(compound.id),
-    getDefaultVariantId(compound.id)
+    getDefaultVariantId(compound.id),
+    getCompoundCoverageStats(compound.id)
   ]);
 
   const selectedVariantId = getParam(query, "variantId") ?? defaultVariantId;
@@ -94,6 +96,8 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
   ]);
 
   const totalPages = Math.max(1, Math.ceil(offersPage.total / pageSize));
+  const coverageSummary = `${coverage.vendorCount} vendor${coverage.vendorCount === 1 ? "" : "s"} · ${coverage.variationCount} variation${coverage.variationCount === 1 ? "" : "s"}`;
+  const subhead = `${compound.description ?? "Normalized vendor offers, trends, and ratings by formulation."} ${coverageSummary}`;
 
   return (
     <main className="page-shell">
@@ -102,7 +106,7 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
       <section className="hero-block">
         <p className="eyebrow">Compound detail</p>
         <h1>{compound.name}</h1>
-        <p>{compound.description ?? "Normalized vendor offers, trends, and ratings by formulation."}</p>
+        <p>{subhead}</p>
       </section>
 
       <section className="section-shell">

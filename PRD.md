@@ -4,7 +4,7 @@
 Stack Tracker is a web platform for normalized peptide pricing intelligence. It scrapes vendor product data, standardizes units/formulations, stores historical pricing, and presents comparison/trend views to end users.
 
 MVP goals:
-- Aggregate vendor prices every 6 hours.
+- Aggregate vendor prices every 24 hours.
 - Normalize compounds, aliases, formulations, and package sizes.
 - Show public homepage + peptide template pages.
 - Sync Finnrick vendor ratings every 24 hours.
@@ -25,8 +25,8 @@ MVP goals:
 - Review queue for ambiguous alias resolution.
 - Featured compounds management.
 - Vendor aggressive rescrape queue.
- - Category browsing pages and category-first navigation.
- - Admin category editor supporting multi-category + primary-category assignment.
+- Category browsing pages and category-first navigation.
+- Admin category editor supporting multi-category + primary-category assignment.
 
 ### Out of scope (MVP)
 - Checkout or transactions.
@@ -74,15 +74,20 @@ MVP goals:
 ## 4. Data and Scraping Requirements
 
 ### Vendor scraping
-- Schedule: every 6 hours.
+- Schedule: every 24 hours.
+- Bounded page concurrency: 2 workers by default (configurable up to 3).
 - Inputs captured:
   - Last scrape timestamp
+  - Last run heartbeat timestamp (for lag/stale-run detection)
   - Product price
   - Product size/strength
   - Calculated normalized unit metrics
 - Change behavior:
   - If offer is unchanged: update `last_scraped_at` / `last_seen_at`, do not append duplicate historical point.
   - If changed: append new historical record and close previous effective window.
+- Reliability behavior:
+  - Reconcile stale `running` scrape runs to `failed` after TTL.
+  - Emit lag alert events when active run heartbeat exceeds lag threshold.
 
 ### Finnrick scraping
 - Schedule: every 24 hours.
@@ -184,9 +189,16 @@ Internal jobs:
 - Bootstrap schema includes one-primary-category partial unique index on `compound_category_map`.
 - Regression tests cover category query guards and categories page metric/link behavior.
 - Discovery/extraction now supports custom storefront embedded payloads (Inertia `data-page`) in addition to JSON-LD/card parsing.
+- Discovery runtime now memoizes per-origin Woo/Shopify API outcomes and reuses API-origin payloads to reduce redundant probes/persistence work within a scrape run.
+- Vendor scraper now uses bounded worker concurrency (`2` default, `3` max) for page targets.
+- Scrape runs now maintain heartbeat timestamps and auto-reconcile stale `running` runs on job start.
+- Runtime emits lag alerts when heartbeat inactivity exceeds threshold.
 - Alias resolution now includes deterministic descriptor-stripping fallback matching before AI/review.
+- Alias-review alerting now batches unresolved aliases per page and uses timeout-bounded delivery to avoid blocking scrape completion.
+- `job:review-ai` now emits progress logs while scanning large open alias queues.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
-- Finnrick ingestion has a recent successful run (`ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`) under full-access network execution.
+- Vendor ingestion has a recent successful run (`ddf17efd-d5b7-48e9-abf3-4c601eea872f`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`.
+- Finnrick ingestion has a recent successful run (`13073ab4-1f9b-498e-8c81-5130b0c35333`) under full-access network execution.
 - Remaining prerequisite for first full ingestion cycle is infrastructure:
   - Working Postgres endpoint (Supabase recommended).
   - Project env vars populated in Vercel and local `.env.local`.

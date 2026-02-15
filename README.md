@@ -20,12 +20,18 @@ Primary docs:
   - `GET /api/compounds/:slug/trend`
   - Admin and internal job routes from the PRD.
 - Scraping:
-  - 6-hour vendor scrape flow with normalization and dedupe/update behavior.
+  - 24-hour vendor scrape flow with normalization and dedupe/update behavior.
+  - Bounded vendor-page parallelism (default concurrency: `2`, configurable up to `3`).
   - API-first discovery using WooCommerce Store API / Shopify products API when available.
+  - Per-origin API discovery caching to avoid redundant Woo/Shopify probes across repeated vendor page targets.
+  - Duplicate API-origin persistence short-circuit (reuse discovery payload once per vendor/source/origin in a run).
   - Standards-first extraction from embedded page data (`schema.org` JSON-LD plus Inertia `data-page` payloads) when present.
   - 24-hour Finnrick sync with `N/A` fallback.
   - Safe-mode robots policy handling.
   - AI-agent fallback task queue for blocked/empty pages.
+  - Unresolved-alias admin alerts are batched per page and sent with timeout-bounded delivery.
+  - Scrape-run heartbeat updates with lag detection alerts.
+  - Stale-run reconciliation marks abandoned `running` scrape runs as failed after TTL.
   - Manual aggressive rescrape queue from admin.
 - Admin:
   - Magic-link auth (single owner).
@@ -80,6 +86,11 @@ Optional while domain is not purchased yet:
 - Set `OPENAI_API_KEY` to enable AI-based product/alias classification.
 - Optional: set `OPENAI_MODEL` (default: `gpt-5-mini`).
 - Optional: set `FIRECRAWL_API_KEY` to enable managed rendering/extraction fallback.
+- Optional runtime tuning:
+  - `VENDOR_SCRAPE_CONCURRENCY` (default `2`, max `3`)
+  - `SCRAPE_RUN_STALE_TTL_MINUTES` (default `30`)
+  - `SCRAPE_RUN_HEARTBEAT_SECONDS` (default `20`)
+  - `SCRAPE_RUN_LAG_ALERT_SECONDS` (default `120`)
 
 4. Bootstrap DB schema and seed:
 
@@ -123,6 +134,10 @@ npm run job:review-ai
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 
+Runtime observability:
+- `job:vendors` now emits run-level, page-level, and offer-level progress logs.
+- `job:review-ai` now emits queue-size and progress counters while scanning.
+
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
 - Use full-access mode for networked ingestion commands.
@@ -149,6 +164,10 @@ Cron endpoints (production/internal use):
 
 - `/api/internal/jobs/vendors`
 - `/api/internal/jobs/finnrick`
+
+Current cron cadence in `vercel.json`:
+- Vendors: daily at `00:00` UTC (`0 0 * * *`)
+- Finnrick: daily at `02:00` UTC (`0 2 * * *`)
 
 Use `Authorization: Bearer $CRON_SECRET` when invoking manually.
 
@@ -196,8 +215,15 @@ npm run test
 - Additional regression coverage for ingestion matching/extraction:
   - `tests/unit/alias-normalize.test.ts`
   - `tests/unit/extractors.test.ts` (Inertia `data-page` case)
-- Latest verified networked ingestion run:
-  - `npm run job:finnrick` succeeded with run `ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`.
+- Additional runtime regression coverage:
+  - `tests/unit/discovery.test.ts` now validates per-origin discovery cache reuse/unsupported-origin memoization.
+  - `tests/unit/worker-alerts.test.ts` validates alias alert batching/truncation formatting.
+- Latest verified networked ingestion runs:
+  - `npm run job:vendors` succeeded with run `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
+  - `npm run job:finnrick` succeeded with run `13073ab4-1f9b-498e-8c81-5130b0c35333`.
+- Job reliability hardening is in place:
+  - Stale `running` scrape runs are auto-reconciled to `failed` after TTL.
+  - Scrape runs persist heartbeat timestamps and emit lag alerts.
 - Remaining launch blockers are infrastructure setup tasks:
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars

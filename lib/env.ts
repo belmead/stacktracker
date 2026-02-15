@@ -21,7 +21,11 @@ const envSchema = z.object({
   SCRAPER_USER_AGENT: z
     .string()
     .default("StackTrackerBot/1.0 (+https://stacktracker.com)"),
-  FINNRICK_VENDORS_URL: z.string().url().default("https://www.finnrick.com/vendors")
+  FINNRICK_VENDORS_URL: z.string().url().default("https://www.finnrick.com/vendors"),
+  VENDOR_SCRAPE_CONCURRENCY: z.coerce.number().int().positive().max(3).default(2),
+  SCRAPE_RUN_STALE_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+  SCRAPE_RUN_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(20),
+  SCRAPE_RUN_LAG_ALERT_SECONDS: z.coerce.number().int().positive().default(120)
 });
 
 export const env = envSchema.parse({
@@ -43,5 +47,9 @@ export const env = envSchema.parse({
   FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
   FIRECRAWL_API_BASE_URL: process.env.FIRECRAWL_API_BASE_URL,
   SCRAPER_USER_AGENT: process.env.SCRAPER_USER_AGENT,
-  FINNRICK_VENDORS_URL: process.env.FINNRICK_VENDORS_URL
+  FINNRICK_VENDORS_URL: process.env.FINNRICK_VENDORS_URL,
+  VENDOR_SCRAPE_CONCURRENCY: process.env.VENDOR_SCRAPE_CONCURRENCY,
+  SCRAPE_RUN_STALE_TTL_MINUTES: process.env.SCRAPE_RUN_STALE_TTL_MINUTES,
+  SCRAPE_RUN_HEARTBEAT_SECONDS: process.env.SCRAPE_RUN_HEARTBEAT_SECONDS,
+  SCRAPE_RUN_LAG_ALERT_SECONDS: process.env.SCRAPE_RUN_LAG_ALERT_SECONDS
 });

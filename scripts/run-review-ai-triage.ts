@@ -33,8 +33,9 @@ async function run(): Promise<void> {
   let resolved = 0;
   let ignored = 0;
   let leftOpen = 0;
+  console.log(`[job:review-ai] scanning ${rows.length} open alias review item(s)`);
 
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     const productName = payloadProductName(row.payload) ?? row.rawText ?? "";
     const rawName = row.rawText ?? productName;
 
@@ -65,6 +66,12 @@ async function run(): Promise<void> {
     }
 
     leftOpen += 1;
+
+    if ((index + 1) % 25 === 0 || index + 1 === rows.length) {
+      console.log(
+        `[job:review-ai] progress ${index + 1}/${rows.length} (resolved=${resolved}, ignored=${ignored}, leftOpen=${leftOpen})`
+      );
+    }
   }
 
   console.log(
