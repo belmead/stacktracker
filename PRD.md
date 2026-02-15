@@ -175,7 +175,7 @@ Internal jobs:
 - UI stage: minimal wireframe with tokenized styles.
 - Typography note: reserve slot for future Geist Pixel application in polish phase.
 
-## 10. Current Implementation Status (as of 2026-02-14)
+## 10. Current Implementation Status (as of 2026-02-15)
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
 - Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
@@ -183,7 +183,10 @@ Internal jobs:
 - Category browsing queries are aligned with selector rules (active variants required).
 - Bootstrap schema includes one-primary-category partial unique index on `compound_category_map`.
 - Regression tests cover category query guards and categories page metric/link behavior.
+- Discovery/extraction now supports custom storefront embedded payloads (Inertia `data-page`) in addition to JSON-LD/card parsing.
+- Alias resolution now includes deterministic descriptor-stripping fallback matching before AI/review.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
+- Finnrick ingestion has a recent successful run (`ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`) under full-access network execution.
 - Remaining prerequisite for first full ingestion cycle is infrastructure:
   - Working Postgres endpoint (Supabase recommended).
   - Project env vars populated in Vercel and local `.env.local`.

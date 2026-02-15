@@ -2,6 +2,7 @@ import { sql } from "@/lib/db/client";
 import type { JSONValue } from "postgres";
 import type { CompoundResolution, ExtractedOffer, MetricPriceMap, ResolutionStatus } from "@/lib/types";
 import { classifyCompoundAliasWithAi } from "@/lib/ai/compound-classifier";
+import { normalizeAlias, stripAliasDescriptors } from "@/lib/alias/normalize";
 
 const toJson = (value: unknown) => sql.json(value as JSONValue);
 
@@ -29,14 +30,6 @@ interface OfferUpsertInput {
   metricPrices: MetricPriceMap;
   available: boolean;
   rawPayload: Record<string, unknown>;
-}
-
-function normalizeAlias(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
 }
 
 interface ResolveCompoundAliasInput {
@@ -73,6 +66,9 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
   const vendorName = typeof input === "string" ? "" : input.vendorName ?? "";
 
   const aliasNormalized = normalizeAlias(rawName);
+  const strippedAlias = stripAliasDescriptors(aliasNormalized);
+  const aliasCandidates = strippedAlias && strippedAlias !== aliasNormalized ? [aliasNormalized, strippedAlias] : [aliasNormalized];
+
   if (!aliasNormalized) {
     return {
       compoundId: null,
@@ -84,51 +80,79 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     };
   }
 
-  const aliasRows = await sql<
-    {
-      compoundId: string | null;
-      confidence: number;
-      status: ResolutionStatus;
-      source: string;
-    }[]
-  >`
-    select compound_id, confidence, status, source
-    from compound_aliases
-    where alias_normalized = ${aliasNormalized}
-    order by created_at desc
-    limit 1
-  `;
+  for (const candidate of aliasCandidates) {
+    const aliasRows = await sql<
+      {
+        compoundId: string | null;
+        confidence: number;
+        status: ResolutionStatus;
+        source: string;
+      }[]
+    >`
+      select compound_id, confidence, status, source
+      from compound_aliases
+      where alias_normalized = ${candidate}
+      order by created_at desc
+      limit 1
+    `;
 
-  const alias = aliasRows[0];
-  if (alias && alias.compoundId) {
-    return {
-      compoundId: alias.compoundId,
-      confidence: alias.confidence,
-      status: alias.status,
-      aliasNormalized,
-      reason: "existing_alias"
-    };
-  }
+    const alias = aliasRows[0];
+    if (!alias) {
+      continue;
+    }
 
-  if (alias && alias.status === "resolved") {
-    return {
-      compoundId: null,
-      confidence: alias.confidence,
-      status: "resolved",
-      aliasNormalized,
-      reason: "cached_non_trackable",
-      skipReview: true
-    };
-  }
+    if (alias.compoundId) {
+      if (candidate !== aliasNormalized) {
+        await upsertAlias({
+          compoundId: alias.compoundId,
+          alias: rawName,
+          aliasNormalized,
+          source: "scraped",
+          confidence: alias.confidence,
+          status: alias.status
+        });
+      }
 
-  if (alias && alias.status === "needs_review" && alias.source === "import") {
-    return {
-      compoundId: null,
-      confidence: alias.confidence,
-      status: "needs_review",
-      aliasNormalized,
-      reason: "ai_review_cached"
-    };
+      return {
+        compoundId: alias.compoundId,
+        confidence: alias.confidence,
+        status: alias.status,
+        aliasNormalized,
+        reason: candidate === aliasNormalized ? "existing_alias" : "existing_alias_stripped"
+      };
+    }
+
+    if (alias.status === "resolved") {
+      if (candidate !== aliasNormalized) {
+        await upsertAlias({
+          compoundId: null,
+          alias: rawName,
+          aliasNormalized,
+          source: "scraped",
+          confidence: alias.confidence,
+          status: "resolved"
+        });
+      }
+
+      return {
+        compoundId: null,
+        confidence: alias.confidence,
+        status: "resolved",
+        aliasNormalized,
+        reason: "cached_non_trackable",
+        skipReview: true
+      };
+    }
+
+    if (alias.status === "needs_review" && alias.source === "import") {
+      return {
+        compoundId: null,
+        confidence: alias.confidence,
+        status: "needs_review",
+        aliasNormalized,
+        reason: "ai_review_cached"
+      };
+    }
   }
 
   const directMatch = await sql<
@@ -140,7 +164,8 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
   >`
     select id, slug, name
     from compounds
-    where lower(name) = ${rawName.toLowerCase()} or slug = ${rawName.toLowerCase()}
+    where (lower(name) = ${rawName.toLowerCase()} or slug = ${rawName.toLowerCase()})
+      and is_active = true
     limit 1
   `;
 
@@ -160,6 +185,46 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
       status: "auto_matched",
       aliasNormalized,
       reason: "direct_compound_match"
+    };
+  }
+
+  for (const candidate of aliasCandidates) {
+    const normalizedDirect = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where
+        is_active = true
+        and (
+          regexp_replace(lower(name), '[^a-z0-9]+', ' ', 'g') = ${candidate}
+          or regexp_replace(lower(slug), '[^a-z0-9]+', ' ', 'g') = ${candidate}
+        )
+      limit 1
+    `;
+
+    const compoundId = normalizedDirect[0]?.id;
+    if (!compoundId) {
+      continue;
+    }
+
+    await upsertAlias({
+      compoundId,
+      alias: rawName,
+      aliasNormalized,
+      source: "scraped",
+      confidence: 0.98,
+      status: "auto_matched"
+    });
+
+    return {
+      compoundId,
+      confidence: 0.98,
+      status: "auto_matched",
+      aliasNormalized,
+      reason: candidate === aliasNormalized ? "normalized_compound_match" : "stripped_compound_match"
     };
   }
 

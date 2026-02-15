@@ -55,6 +55,10 @@ All notable changes to Stack Tracker are documented in this file.
 - Regression tests for category behavior:
   - `tests/unit/category-queries.test.ts` validates active-variant guards in category DB queries.
   - `tests/unit/categories-page.test.ts` validates `/categories` metric fallback/preservation and category link rendering.
+- Alias normalization regression tests:
+  - `tests/unit/alias-normalize.test.ts` validates descriptor stripping for dosage/formulation suffixes while preserving ambiguous blend terms.
+- HTML extraction regression test:
+  - `tests/unit/extractors.test.ts` now validates Inertia `data-page` extraction for product+variant payloads.
 
 ### Changed
 - Floating nav category selector now routes to category pages before compound selection.
@@ -79,9 +83,15 @@ All notable changes to Stack Tracker are documented in this file.
   - `compound_category_map_one_primary_per_compound`.
 - Category browsing query behavior now aligns with selector behavior by requiring active variants.
 - Admin category editor save workflow now catches network/fetch failures and surfaces an explicit row-level error.
+- HTML discovery now parses Inertia `#app[data-page]` payloads and converts embedded product/variant records into offers (fixes coverage gaps on custom storefronts like `eliteresearchusa.com`).
+- Alias resolution now attempts deterministic stripped-name matching (removing dosage/formulation descriptors like `10mg`, `vial`, `capsules`) before falling back to AI/review, improving auto-match coverage when base compounds already exist.
+- Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
+- Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 
 ### Verified
 - Passing checks under Node 20:
   - `npm run typecheck`
   - `npm run lint`
   - `npm run test`
+- Verified networked ingestion execution in full-access mode:
+  - `npm run job:finnrick` succeeded (`scrapeRunId=ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`).

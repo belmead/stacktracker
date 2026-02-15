@@ -14,6 +14,24 @@ interface JsonMap {
   [key: string]: unknown;
 }
 
+interface InertiaVariantLike {
+  id?: string | number;
+  amount?: string | number;
+  unit?: string;
+  price?: string | number;
+  discounted_price?: string | number;
+  sold_out?: boolean | number;
+  num_available?: number;
+  archived?: boolean | number;
+}
+
+interface InertiaProductLike {
+  name?: string;
+  slug?: string;
+  variants?: unknown;
+  archived?: boolean | number;
+}
+
 const EXCLUDED_PATH_PATTERNS = [/\/cart\b/, /\/checkout\b/, /\/my-account\b/, /\/account\b/, /\/wishlist\b/, /\/search\b/, /\/blog\b/];
 const REQUIRED_PATH_PATTERNS = [/\/product\//, /\/products\//, /\/product-category\//, /\/shop\/?/];
 const EXCLUDED_QUERY_KEYS = ["add-to-cart", "add_to_cart", "add-to-wishlist", "add_to_wishlist"];
@@ -226,6 +244,152 @@ function readSchemaPriceCents(product: JsonMap, offer: JsonMap): number | null {
   return null;
 }
 
+function parsePriceCents(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.round(value * 100);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.]/g, ""));
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.round(parsed * 100);
+    }
+  }
+
+  return null;
+}
+
+function parseInertiaDataPage(html: string): JsonMap | null {
+  const $ = cheerio.load(html);
+  const raw = $("#app").attr("data-page");
+  if (!raw || !raw.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as JsonMap) : null;
+  } catch {
+    const decoded = raw
+      .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/&amp;/g, "&");
+
+    try {
+      const parsed = JSON.parse(decoded) as unknown;
+      return parsed && typeof parsed === "object" ? (parsed as JsonMap) : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function formatVariantAmount(amount: string | number | undefined, unit: string | undefined): string | null {
+  if (amount === undefined || amount === null || !unit || !unit.trim()) {
+    return null;
+  }
+
+  const amountValue = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    return null;
+  }
+
+  const normalizedAmount = Number.isInteger(amountValue) ? String(amountValue) : String(amountValue).replace(/\.?0+$/, "");
+  const normalizedUnit = unit.trim().toLowerCase();
+
+  return `${normalizedAmount}${normalizedUnit}`;
+}
+
+function extractFromInertiaDataPage(html: string, context: ExtractContext): ExtractedOffer[] {
+  const parsed = parseInertiaDataPage(html);
+  if (!parsed) {
+    return [];
+  }
+
+  const props = parsed.props;
+  if (!props || typeof props !== "object") {
+    return [];
+  }
+
+  const products = (props as { products?: unknown }).products;
+  if (!Array.isArray(products)) {
+    return [];
+  }
+
+  const offers: ExtractedOffer[] = [];
+  const seen = new Set<string>();
+
+  for (const rawProduct of products) {
+    if (!rawProduct || typeof rawProduct !== "object") {
+      continue;
+    }
+
+    const product = rawProduct as InertiaProductLike;
+    if (product.archived === true || product.archived === 1) {
+      continue;
+    }
+
+    const productName = cleanupText(typeof product.name === "string" ? product.name : "");
+    if (!productName) {
+      continue;
+    }
+
+    const basePath = typeof product.slug === "string" && product.slug.trim() ? `/products/${product.slug.trim()}` : "";
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    if (variants.length === 0) {
+      continue;
+    }
+
+    for (const rawVariant of variants) {
+      if (!rawVariant || typeof rawVariant !== "object") {
+        continue;
+      }
+
+      const variant = rawVariant as InertiaVariantLike;
+      if (variant.archived === true || variant.archived === 1) {
+        continue;
+      }
+
+      const priceCents = parsePriceCents(variant.discounted_price ?? variant.price);
+      if (!priceCents || priceCents <= 0) {
+        continue;
+      }
+
+      const amount = formatVariantAmount(variant.amount, variant.unit);
+      const fullName = amount ? `${productName} ${amount}` : productName;
+
+      const variantId = typeof variant.id === "string" || typeof variant.id === "number" ? String(variant.id) : "";
+      const rawProductUrl = variantId && basePath ? `${basePath}?variant=${variantId}` : basePath || context.pageUrl;
+      const productUrl = toAbsoluteUrl(context.pageUrl, rawProductUrl) ?? context.pageUrl;
+      if (!isLikelyProductUrl(productUrl)) {
+        continue;
+      }
+
+      const soldOut = variant.sold_out === true || variant.sold_out === 1;
+      const hasInventory = typeof variant.num_available === "number" ? variant.num_available > 0 : true;
+      const available = !soldOut && hasInventory;
+
+      const offer = buildExtractedOffer({
+        vendorPageId: context.vendorPageId,
+        vendorId: context.vendorId,
+        pageUrl: context.pageUrl,
+        productUrl,
+        productName: fullName,
+        priceCents,
+        availabilityText: available ? "in_stock" : "out_of_stock",
+        payload: {
+          extractor: "inertia_data_page"
+        }
+      });
+
+      pushUnique(offers, offer, seen);
+    }
+  }
+
+  return offers;
+}
+
 function extractFromJsonLd(html: string, context: ExtractContext): ExtractedOffer[] {
   const $ = cheerio.load(html);
   const offers: ExtractedOffer[] = [];
@@ -414,14 +578,23 @@ export function extractOffersFromHtml(input: {
     pageUrl: input.pageUrl
   };
 
-  const structured = extractFromJsonLd(input.html, context);
-  if (structured.length >= 3) {
-    return structured;
+  const inertia = extractFromInertiaDataPage(input.html, context);
+  if (inertia.length >= 3) {
+    return inertia;
   }
 
+  const structured = extractFromJsonLd(input.html, context);
   const primary = extractFromCards(input.html, context);
-  const merged = [...structured];
+  const merged = [...inertia];
   const seen = new Set(merged.map((item) => `${item.vendorId}::${item.productUrl}`));
+
+  for (const offer of structured) {
+    pushUnique(merged, offer, seen);
+  }
+
+  if (merged.length >= 3) {
+    return merged;
+  }
 
   for (const offer of primary) {
     pushUnique(merged, offer, seen);

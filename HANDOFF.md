@@ -1,12 +1,50 @@
 # Stack Tracker Handoff Note
 
 ## Snapshot
-- Date: 2026-02-14
+- Date: 2026-02-15
 - Project path: `/Users/belmead/Documents/stacktracker`
-- Environment: Supabase connection working; local Postgres is not used.
-- App status: `npm run db:bootstrap` and ingestion jobs are operational.
-- Most recent vendor run: `ddf3aedb-8af1-43a4-a6a8-ef3a0716c75c` (`pagesTotal=10`, `pagesSuccess=9`, `pagesFailed=1`).
+- Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
+- App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
+- Most recent completed vendor run: `b307de3e-62ce-4958-a35b-62f1d9fa9fe8` (`pagesTotal=10`, `pagesSuccess=9`, `pagesFailed=1`, `unresolvedAliases=432`, `aiTasksQueued=1`).
+- Most recent Finnrick run: `ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+
+## Network Resolution Update (2026-02-15)
+- Root cause of prior DNS errors was identified:
+  - Node/curl inside restricted sandbox returned `ENOTFOUND` for vendor domains and Supabase pooler host.
+  - The same lookups outside sandbox resolved normally (`scutil`/`nslookup`/Node DNS checks).
+- Validation after enabling full access:
+  - DNS resolution now succeeds in-session for:
+    - `aws-0-us-west-2.pooler.supabase.com`
+    - `peptidelabsx.com`
+    - `nexgenpeptides.shop`
+  - `npm run job:finnrick` now succeeds (run ID above).
+- Operational implication:
+  - Do not change application code for this; keep environment/runtime permissions correct in Codex sessions when running networked jobs.
+
+## Latest Update (2026-02-14, ingestion coverage hardening)
+- Ingestion runs executed:
+  - `npm run job:vendors` succeeded with run `b307de3e-62ce-4958-a35b-62f1d9fa9fe8`.
+  - `npm run job:finnrick` failed twice with `getaddrinfo ENOTFOUND aws-0-us-west-2.pooler.supabase.com`.
+  - `npm run job:review-ai` failed with the same `ENOTFOUND` error.
+- Highest-impact fixes implemented from that run:
+  - Added Inertia `data-page` extraction support in HTML parser:
+    - `lib/scraping/extractors.ts`
+    - Supports custom storefront payloads where product+variant pricing is embedded in `#app[data-page]` (not JSON-LD/cards).
+  - Added deterministic stripped-alias matching before AI fallback:
+    - `lib/alias/normalize.ts`
+    - `lib/db/mutations.ts`
+    - Removes dosage/formulation descriptors (for example `10mg`, `vial`, `capsules`) before re-checking existing aliases/compound matches.
+  - Added Elite products catalog target to seed list:
+    - `sql/seed.sql` now includes `https://eliteresearchusa.com/products`.
+- Regression coverage added:
+  - `tests/unit/alias-normalize.test.ts`
+  - Expanded `tests/unit/extractors.test.ts` with Inertia payload case.
+- Validation completed:
+  - `npm run test` (pass)
+  - `npm run typecheck` (pass)
+  - `npm run lint` (pass)
+- Note: a post-fix `npm run job:vendors` rerun was started but hung >10 minutes without final JSON output and was manually interrupted; production impact of fixes is therefore code-complete but run-level metrics still need one clean re-run.
 
 ## Continuation Update (2026-02-14)
 - DB/app category consistency was re-verified against Supabase:
@@ -176,35 +214,43 @@
 - `bpc-157` is no longer empty after the latest expanded scrape.
 - Active BPC listings now include pure BPC products from at least 2 vendors.
 - Blended BPC entries (for example BPC + TB500 blends) are now inactive for `bpc-157`.
-- One vendor target still fails with `no_data`: `Elite Research USA` root page.
+- `Elite Research USA` root-page extraction gap has a code-level fix (Inertia payload parsing); pending one clean vendor rerun to verify run-level counters.
 - `unresolvedAliases` remains high; review queue is active and expected.
 - Category taxonomy mappings are now complete for curated set (`48/48` imported), but many newly seeded compounds are placeholders until scrape discovery creates active variants/offers.
 
 ## Open Risks / Remaining Work
 - AI-first compound classification now drives match/skip/review decisions; quality depends on `OPENAI_API_KEY` + model behavior.
-- One vendor extraction target (`eliteresearchusa.com`) needs better page targeting or fallback strategy.
+- Post-fix vendor run verification is still pending because one rerun stalled without final output and was manually interrupted.
+- `job:review-ai` can run for a long time on large open queues; current script has no explicit runtime guard/progress logging.
+- Vendor job runtime is still inflated by per-alias alert behavior when unresolved volume is high (many serial alert sends).
 - Email delivery depends on Resend sender/domain verification; local server-log fallback is available.
 - Some non-BPC compound alias quality still needs curation because unresolved volume is high.
 - Firecrawl fallback is optional and currently disabled unless `FIRECRAWL_API_KEY` is set.
 - Newly seeded compounds may not yet appear in public selectors until they have active variants/offers (current selector filter requires variant presence).
 
 ## Immediate Next Steps
-1. Re-run ingestion to increase active variant/offer coverage:
+1. Re-run ingestion now that full-access DNS/network is confirmed:
    - `npm run job:vendors`
    - `npm run job:finnrick`
    - `npm run job:review-ai`
-2. Improve extraction coverage for `eliteresearchusa.com` (current known weak target) by adding/validating deeper catalog targets.
-3. Re-check public category UX after ingestion:
+2. Verify impact of the new extraction + alias fixes from a clean vendor run:
+   - confirm `pagesFailed` drops from `1` to `0` (or identify remaining failed target)
+   - confirm non-zero `offersCreated`/`offersUpdated`/`offersUnchanged`
+   - confirm `unresolvedAliases` trend improves from `432`
+3. Reduce ingestion runtime overhead:
+   - replace per-item unresolved alias alerts with per-vendor/per-run summaries
+   - add per-target timing logs and runtime caps for long-running review triage scripts
+4. Re-check public category UX after ingestion:
    - `/categories`
    - `/categories/[slug]`
    - confirm only variant-backed compounds appear and counts are sensible.
-4. Continue vendor onboarding from unresolved URL queue:
+5. Continue vendor onboarding from unresolved URL queue:
    - Precision Peptide Co
    - Amino Lair
    - UWA Elite Peptides
    - Peptide Worldwide
    - Amplified Amino
-5. Triage review queue ambiguities after AI pass (focus on true blend/alias ambiguity, ignore CTA/noise).
+6. Triage review queue ambiguities after AI pass (focus on true blend/alias ambiguity, ignore CTA/noise).
 
 ## Verification Checklist (Mapped To Your Commentary)
 1. Homepage metric scope
@@ -238,7 +284,7 @@
 - Verify composite products (BPC + another compound) are excluded from active single-compound listing.
 
 6. Known gap check
-- Expect only partial vendor coverage until Elite Research target extraction is improved.
+- Verify post-fix vendor coverage now that Inertia payload extraction is implemented; if a target still fails, capture exact URL + discovery attempts.
 
 ## If Starting A New Thread
 Use this copy/paste prompt:
@@ -258,13 +304,14 @@ Current state to assume:
 3. Category browsing exists at /categories and /categories/[slug] and now only includes compounds with active variants.
 4. DB bootstrap schema includes one-primary-category partial unique index on compound_category_map.
 5. Category consistency is verified (48/48 compounds mapped with one primary each).
-6. Regression tests exist for category query guards and categories page behavior.
+6. Discovery now includes Inertia `data-page` extraction and stripped-alias deterministic matching; tests cover both (`tests/unit/extractors.test.ts`, `tests/unit/alias-normalize.test.ts`).
+7. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
-1. Running ingestion jobs and summarizing coverage deltas:
+1. Re-running ingestion jobs and summarizing coverage deltas:
    - npm run job:vendors
    - npm run job:finnrick
    - npm run job:review-ai
-2. Prioritizing next highest-impact fixes from resulting gaps.
-3. Implementing the fixes and updating docs/tests as needed.
+2. Confirming post-fix vendor counters (failed pages + unresolved aliases + offer persistence) against run `b307de3e-62ce-4958-a35b-62f1d9fa9fe8`.
+3. Prioritizing remaining highest-impact coverage gaps (especially runtime and unresolved-alias throughput) and updating docs/tests.
 ```

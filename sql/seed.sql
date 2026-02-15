@@ -26,6 +26,7 @@ with desired_vendor_pages as (
   select * from (
     values
       ('elite-research-usa', 'http://eliteresearchusa.com/', 'catalog'),
+      ('elite-research-usa', 'https://eliteresearchusa.com/products', 'catalog'),
       ('peptide-labs-x', 'https://peptidelabsx.com/', 'catalog'),
       ('peptide-labs-x', 'https://peptidelabsx.com/product-category/products-all/', 'catalog'),
       ('peptide-labs-x', 'https://peptidelabsx.com/shop/', 'catalog'),

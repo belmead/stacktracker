@@ -22,7 +22,7 @@ Primary docs:
 - Scraping:
   - 6-hour vendor scrape flow with normalization and dedupe/update behavior.
   - API-first discovery using WooCommerce Store API / Shopify products API when available.
-  - Standards-first extraction from `schema.org` JSON-LD (`Product`/`Offer`) when present.
+  - Standards-first extraction from embedded page data (`schema.org` JSON-LD plus Inertia `data-page` payloads) when present.
   - 24-hour Finnrick sync with `N/A` fallback.
   - Safe-mode robots policy handling.
   - AI-agent fallback task queue for blocked/empty pages.
@@ -123,6 +123,10 @@ npm run job:review-ai
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 
+Codex runtime note:
+- In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
+- Use full-access mode for networked ingestion commands.
+
 ## Production-first setup (Supabase + Vercel)
 
 1. Create a Supabase project and copy the Postgres connection string.
@@ -153,6 +157,7 @@ Use `Authorization: Bearer $CRON_SECRET` when invoking manually.
 Seeded in `sql/seed.sql`:
 
 - `http://eliteresearchusa.com/`
+- `https://eliteresearchusa.com/products`
 - `https://peptidelabsx.com/`
 - `https://nexgenpeptides.shop/`
 
@@ -188,6 +193,11 @@ npm run test
 - Regression coverage added for category logic:
   - `tests/unit/category-queries.test.ts`
   - `tests/unit/categories-page.test.ts`
+- Additional regression coverage for ingestion matching/extraction:
+  - `tests/unit/alias-normalize.test.ts`
+  - `tests/unit/extractors.test.ts` (Inertia `data-page` case)
+- Latest verified networked ingestion run:
+  - `npm run job:finnrick` succeeded with run `ab5a54c0-1ac7-47f2-a0cf-a6f3cca8a010`.
 - Remaining launch blockers are infrastructure setup tasks:
   - Supabase project + `DATABASE_URL`
   - Vercel project env vars
