@@ -14,6 +14,38 @@ interface ReviewRow {
 
 type ReviewOutcome = "resolved" | "ignored" | "leftOpen";
 
+function parseLimitArg(argv: string[]): number | null {
+  let raw: string | null = null;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === "--limit") {
+      raw = argv[index + 1] ?? null;
+      break;
+    }
+
+    if (token.startsWith("--limit=")) {
+      raw = token.slice("--limit=".length);
+      break;
+    }
+  }
+
+  if (raw === null) {
+    raw = process.env.REVIEW_AI_LIMIT ?? null;
+  }
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid review-ai limit: "${raw}". Use a positive integer.`);
+  }
+
+  return parsed;
+}
+
 function payloadProductName(payload: Record<string, unknown> | null): string | null {
   const value = payload?.productName;
   return typeof value === "string" ? value : null;
@@ -33,7 +65,8 @@ function formatDuration(seconds: number): string {
 
 async function run(): Promise<void> {
   const startedAtMs = Date.now();
-  const rows = await sql<ReviewRow[]>`
+  const limit = parseLimitArg(process.argv.slice(2));
+  const allRows = await sql<ReviewRow[]>`
     select
       rq.id,
       rq.raw_text as "rawText",
@@ -46,12 +79,15 @@ async function run(): Promise<void> {
       and rq.status in ('open', 'in_progress')
     order by rq.created_at asc
   `;
+  const rows = typeof limit === "number" ? allRows.slice(0, limit) : allRows;
 
   let resolved = 0;
   let ignored = 0;
   let leftOpen = 0;
   console.log(
-    `[job:review-ai] scanning ${rows.length} open alias review item(s) (logging every ${PROGRESS_LOG_EVERY} item(s))`
+    `[job:review-ai] scanning ${rows.length} open alias review item(s)` +
+      `${typeof limit === "number" ? ` (limited from ${allRows.length})` : ""} ` +
+      `(logging every ${PROGRESS_LOG_EVERY} item(s))`
   );
 
   for (const [index, row] of rows.entries()) {
@@ -116,6 +152,8 @@ async function run(): Promise<void> {
         resolved,
         ignored,
         leftOpen,
+        totalOpenAtStart: allRows.length,
+        limitApplied: limit,
         durationSeconds: Number(elapsedSeconds.toFixed(2)),
         itemsPerMinute: Number(((itemsScanned / elapsedSeconds) * 60).toFixed(2)),
         secondsPerItem: Number((elapsedSeconds / Math.max(1, itemsScanned)).toFixed(2))

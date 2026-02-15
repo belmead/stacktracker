@@ -14,11 +14,32 @@ interface CompoundSeed {
 
 const COMPOUND_SEEDS: CompoundSeed[] = [
   {
+    name: "Tirzepatide",
+    slug: "tirzepatide",
+    description: "Dual GIP/GLP-1 agonist peptide listings, including shorthand aliases like tirz and GLP-1 TZ.",
+    aliases: ["Tirzepatide", "Tirz", "GLP-1 TZ", "GLP 1 TZ", "NG-TZ", "NG TZ"]
+  },
+  {
+    name: "LL-37",
+    slug: "ll-37",
+    description: "Host-defense peptide listings, including vendor variants labeled as LL-37 Complex.",
+    aliases: ["LL-37", "LL 37", "LL-37 Complex", "LL 37 Complex"]
+  },
+  {
+    name: "Cagrilintide",
+    slug: "cagrilintide",
+    description: "Amylin analog peptide listings, including shorthand aliases like CAG.",
+    aliases: ["Cagrilintide", "Cagrilinitide", "Cag", "CAG"]
+  },
+  {
     name: "CJC-1295 with DAC (and IPA)",
     slug: "cjc-1295-with-dac-and-ipa",
     description: "Blend entry for CJC-1295 with DAC combined with Ipamorelin.",
     aliases: [
       "CJC-1295 with DAC (and IPA)",
+      "CJC-1295 with DAC",
+      "CJC-1295 - With DAC",
+      "CJC-1295 – With DAC",
       "CJC-1295 WITH DAC + IPA",
       "CJC-1295 + IPA (with DAC)",
       "CJC-1295/Ipamorelin with DAC"
@@ -45,6 +66,7 @@ const ASSIGNMENTS: Assignment[] = [
   { compound: "BPC-157", categories: "Healing" },
   { compound: "BPC-157 + KPV", categories: "Healing" },
   { compound: "BROMANTANE", categories: "Actoprotector" },
+  { compound: "Cagrilintide", categories: "Fat loss" },
   { compound: "CJC-1295 with DAC (and IPA)", categories: "Growth hormone" },
   { compound: "CJC-1295 no DAC (with IPA)", categories: "Growth hormone" },
   { compound: "CJC-1295", categories: "Growth hormone" },
@@ -63,6 +85,7 @@ const ASSIGNMENTS: Assignment[] = [
   { compound: "IPAMORELIN", categories: "Growth hormone" },
   { compound: "KLOW", categories: "Healing blend" },
   { compound: "KPV", categories: "Anti inflammatory" },
+  { compound: "LL-37", categories: "Immune" },
   { compound: "L-CARNITINE", categories: "Metabolic" },
   { compound: "LIPO-C / B12", categories: "Metabolic" },
   { compound: "MELANOTAN 1", categories: "Tanning" },
@@ -82,6 +105,7 @@ const ASSIGNMENTS: Assignment[] = [
   { compound: "SR-9011", categories: "Metabolic" },
   { compound: "TB-500", categories: "Healing" },
   { compound: "Retatrutide", categories: "Fat loss" },
+  { compound: "Tirzepatide", categories: "Fat loss" },
   { compound: "TESAMORELIN", categories: "Growth hormone" },
   { compound: "TESOFENSINE", categories: "Appetite suppressant" },
   { compound: "THERMOGENIX", categories: "Fat loss" },

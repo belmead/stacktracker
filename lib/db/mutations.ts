@@ -3,9 +3,12 @@ import type { JSONValue } from "postgres";
 import type { CompoundResolution, ExtractedOffer, MetricPriceMap, ResolutionStatus } from "@/lib/types";
 import { classifyCompoundAliasWithAi } from "@/lib/ai/compound-classifier";
 import {
+  isLikelyCagrilintideShorthand,
   isLikelyBlendOrStackProduct,
+  isLikelyCjcWithDacAlias,
   isLikelyNonProductListing,
   isLikelyRetatrutideShorthand,
+  isLikelyTirzepatideShorthand,
   normalizeAlias,
   stripAliasDescriptors,
   stripStorefrontNoise
@@ -185,7 +188,7 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     }
   }
 
-  if (!likelyBlendOrStack && (isLikelyRetatrutideShorthand(rawName) || isLikelyRetatrutideShorthand(productName))) {
+  if (isLikelyRetatrutideShorthand(rawName) || isLikelyRetatrutideShorthand(productName)) {
     const retatrutideRows = await sql<
       {
         id: string;
@@ -215,6 +218,115 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
         status: "auto_matched",
         aliasNormalized,
         reason: "retatrutide_shorthand_rule"
+      };
+    }
+  }
+
+  if (isLikelyTirzepatideShorthand(rawName) || isLikelyTirzepatideShorthand(productName)) {
+    const tirzepatideRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('tirzepatide', 'tirz')
+        and is_active = true
+      order by case when slug = 'tirzepatide' then 0 else 1 end asc
+      limit 1
+    `;
+
+    const tirzepatideId = tirzepatideRows[0]?.id;
+    if (tirzepatideId) {
+      await upsertAlias({
+        compoundId: tirzepatideId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.9,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: tirzepatideId,
+        confidence: 0.9,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "tirzepatide_shorthand_rule"
+      };
+    }
+  }
+
+  if (isLikelyCagrilintideShorthand(rawName) || isLikelyCagrilintideShorthand(productName)) {
+    const cagrilintideRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('cagrilintide', 'cagrilinitide')
+        and is_active = true
+      order by case when slug = 'cagrilintide' then 0 else 1 end asc
+      limit 1
+    `;
+
+    const cagrilintideId = cagrilintideRows[0]?.id;
+    if (cagrilintideId) {
+      await upsertAlias({
+        compoundId: cagrilintideId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.9,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: cagrilintideId,
+        confidence: 0.9,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "cagrilintide_shorthand_rule"
+      };
+    }
+  }
+
+  if (isLikelyCjcWithDacAlias(rawName) || isLikelyCjcWithDacAlias(productName)) {
+    const cjcRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('cjc-1295-with-dac', 'cjc-1295-with-dac-and-ipa')
+        and is_active = true
+      order by case
+        when slug = 'cjc-1295-with-dac' then 0
+        when slug = 'cjc-1295-with-dac-and-ipa' then 1
+        else 2
+      end asc
+      limit 1
+    `;
+
+    const cjcWithDacId = cjcRows[0]?.id;
+    if (cjcWithDacId) {
+      await upsertAlias({
+        compoundId: cjcWithDacId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.95,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: cjcWithDacId,
+        confidence: 0.95,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "cjc_with_dac_rule"
       };
     }
   }
@@ -313,7 +425,26 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     compounds
   });
 
-  if (classification?.decision === "match" && classification.canonicalSlug && !likelyBlendOrStack) {
+  if (classification?.decision === "match" && classification.canonicalSlug) {
+    if (likelyBlendOrStack) {
+      await upsertAlias({
+        compoundId: null,
+        alias: classification.alias,
+        aliasNormalized,
+        source: "import",
+        confidence: classification.confidence,
+        status: "needs_review"
+      });
+
+      return {
+        compoundId: null,
+        confidence: classification.confidence,
+        status: "needs_review",
+        aliasNormalized,
+        reason: "ai_match_conflicts_blend_heuristic"
+      };
+    }
+
     const matched = compounds.find((compound) => compound.slug === classification.canonicalSlug);
     if (matched) {
       await upsertAlias({
@@ -355,22 +486,22 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     };
   }
 
-  if (classification && likelyBlendOrStack) {
+  if (!classification && likelyBlendOrStack) {
     await upsertAlias({
       compoundId: null,
-      alias: classification.alias,
+      alias: rawName || rawNameOriginal,
       aliasNormalized,
-      source: "import",
-      confidence: classification.confidence,
+      source: "scraped",
+      confidence: 0.85,
       status: "resolved"
     });
 
     return {
       compoundId: null,
-      confidence: classification.confidence,
+      confidence: 0.85,
       status: "resolved",
       aliasNormalized,
-      reason: "ai_skip_blend_or_stack",
+      reason: "heuristic_blend_fallback",
       skipReview: true
     };
   }

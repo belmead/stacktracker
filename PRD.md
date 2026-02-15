@@ -187,7 +187,7 @@ Internal jobs:
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
 - Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
-- Category taxonomy importer is implemented and currently applies `48/48` curated assignments with multi-category support.
+- Category taxonomy importer is implemented and currently applies `51/51` curated assignments with multi-category support.
 - Category browsing queries are aligned with selector rules (active variants required).
 - Bootstrap schema includes one-primary-category partial unique index on `compound_category_map`.
 - Regression tests cover category query guards and categories page metric/link behavior.
@@ -199,12 +199,19 @@ Internal jobs:
 - Alias resolution now includes deterministic descriptor-stripping fallback matching before AI/review.
 - Alias resolution now strips storefront noise before deterministic and AI matching.
 - Non-product/noise listings and blend/stack aliases are auto-ignored for single-compound integrity (no offer persistence).
+- Non-trackable supplement aliases (for example `pre-workout`) are deterministically ignored to prevent manual-review queue churn.
 - Retatrutide shorthand aliases now have deterministic fallback matching to reduce avoidable review queue load.
+- Tirzepatide shorthand aliases now have deterministic fallback matching (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`).
+- Cagrilintide shorthand aliases now have deterministic fallback matching (`Cag`, `Cagrilinitide` misspelling).
+- CJC with DAC aliases are now normalized safely even when titles contain HTML entities (for example `&#8211;`).
+- LL-37 canonical mapping now covers vendor phrasing like `LL-37 Complex`.
 - Alias-review alerting now batches unresolved aliases per page and uses timeout-bounded delivery to avoid blocking scrape completion.
 - `job:review-ai` now emits progress logs while scanning large open alias queues.
+- `job:review-ai` now supports bounded slices via `--limit=<N>` / `REVIEW_AI_LIMIT`.
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
-- After enabling `OPENAI_API_KEY`, three 25-item slices processed `75` items with `resolved=31`, `ignored=39`, `leftOpen=5`, moving queue `open` from `516` to `446`.
+- After enabling `OPENAI_API_KEY`, bounded slices plus manual adjudication completed alias triage queue burn-down.
+- Current `alias_match` queue totals: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
 - Vendor runs now prune aged operational-noise history (`review_queue` resolved/ignored + non-trackable alias rows) via retention env settings.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
 - Vendor ingestion has a recent successful run (`ddf17efd-d5b7-48e9-abf3-4c601eea872f`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`.

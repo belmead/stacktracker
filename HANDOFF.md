@@ -8,9 +8,46 @@
 - Most recent completed vendor run: `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersUnchanged=86`, `unresolvedAliases=90`, `aiTasksQueued=0`, ~`131.6s` runtime).
 - Most recent Finnrick run: `13073ab4-1f9b-498e-8c81-5130b0c35333` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Most recent review-ai slice run (2026-02-15, 25 items): `resolved=8`, `ignored=14`, `leftOpen=3`, `real=52.61s`.
-- Latest alias queue totals (after three 25-item slices): `open=446`, `resolved=218`, `ignored=39`, `in_progress=0`.
+- Alias triage queue is fully burned down (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+
+## Final Queue Closure Update (2026-02-15, full burn-down + adjudication)
+- Completed all remaining bounded triage slices and manual adjudication pass; no open alias review items remain.
+- Manual adjudication outcomes applied:
+  - Ignored vendor-exclusive Elite branded formulas plus `Peak Power`; `MK-777` is intentionally excluded for now until cross-vendor evidence appears.
+  - Resolved `GLP-1 TZ (10MG)` to canonical `tirzepatide`.
+  - Resolved malformed-title `CJC-1295 &#8211; With DAC (10mg)` via HTML-entity cleanup + CJC-with-DAC mapping.
+  - Resolved `Cag (Cag (5MG))` to canonical `cagrilintide`.
+  - Resolved vendor `LL-37 Complex` phrasing to canonical `ll-37`.
+- Heuristic and prompt hardening added for this pass:
+  - Deterministic shorthand matching now covers `tirzepatide` (`TZ`/`tirz`/`GLP-1 TZ` plus prefixed forms) and `cagrilintide` (`Cag`, `Cagrilinitide` misspelling).
+  - AI prompt now treats blend/stack words as non-fatal without clear multi-compound evidence (prefer `review` over unsafe skip/match).
+  - Storefront cleanup now strips HTML entities before alias normalization.
+  - Curated taxonomy/seed updates include `Tirzepatide`, `Cagrilintide`, and `LL-37` canonical support.
+- Latest category import verification:
+  - `npm run db:import-categories` -> `seededCompoundCount=51`, `appliedCount=51`, `unresolvedCount=0`.
+
+## Continuation Update (2026-02-15, limited triage + unresolved audit)
+- Quality gates re-run and passing after updates:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+- Added cost-control support for AI triage:
+  - `job:review-ai` now supports `--limit=<N>` (and `REVIEW_AI_LIMIT`) to process bounded slices.
+- Executed one bounded slice:
+  - Command: `npm run job:review-ai -- --limit=25`
+  - Output: `itemsScanned=25`, `resolved=13`, `ignored=7`, `leftOpen=5`, `durationSeconds=54.3`.
+  - Queue delta from this run: `open -20`, `resolved +13`, `ignored +7`.
+- Unresolved items remaining from the processed 25 (all 5) are the same normalized alias:
+  - `pre workout tad`
+  - IDs: `75f723f1-3703-48b7-9f1d-b5c88b8b9ca4`, `7fd3bbe1-0986-4122-a535-376ac1be8b72`, `3c6a87ad-dccb-469f-a3bf-55bb11b7523a`, `117f8531-f6be-4bcf-ba09-24bb381803d8`, `b740906f-8402-460e-b345-5c6eb2df8df8`.
+  - Likely reason group: non-trackable supplement naming plus duplicate queue entries created before alias-memory convergence in-batch (not canonical-compound ambiguity).
+- Spot-check precision results:
+  - Retatrutide shorthand cases (`NG-1 RT`, including storefront-noise variants) resolved, not ignored.
+  - Storefront/merch noise and stack cases (`NexGen x Barbarian`, `Recovery Stack`, `Peptide Kit`) were ignored as intended.
+- Heuristic tightened for this unresolved pattern:
+  - Added deterministic `pre-workout` detection in non-trackable alias logic so these entries auto-ignore without manual queue carry-over.
+  - Regression updated in `tests/unit/alias-normalize.test.ts`.
 
 ## Tonight Update (2026-02-15, AI triage activation + queue burn-down)
 - Root cause of stalled review queue was confirmed and fixed operationally:
@@ -399,19 +436,28 @@ Start by reading:
 - /Users/belmead/Documents/stacktracker/CHANGELOG.md
 
 Current state to assume:
-1. Vendor catalog pages exist at /vendors/[slug] with local-time last-updated label.
-2. Admin category editor exists at /admin/categories backed by POST /api/admin/categories.
-3. Category browsing exists at /categories and /categories/[slug] and now only includes compounds with active variants.
-4. DB bootstrap schema includes one-primary-category partial unique index on compound_category_map.
-5. Category consistency is verified (48/48 compounds mapped with one primary each).
-6. Discovery now includes Inertia `data-page` extraction and stripped-alias deterministic matching; tests cover both (`tests/unit/extractors.test.ts`, `tests/unit/alias-normalize.test.ts`).
-7. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
+1. Alias triage queue is fully closed: `alias_match` totals are `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+2. Heuristics now cover noisy GLP shorthand and vendor euphemisms:
+   - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`
+   - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ` / `ER-TZ`
+   - cagrilintide: `Cag` / `Cagrilinitide` misspelling
+3. HTML entities are stripped during normalization, which fixed `CJC-1295 &#8211; With DAC (10mg)` matching.
+4. Canonical mapping now treats `LL-37 Complex` as `LL-37`.
+5. Vendor-exclusive branded formulas from Elite plus `Peak Power` (and currently single-vendor `MK-777`) are intentionally ignored for now.
+6. Category importer + seeds now include `Tirzepatide`, `Cagrilintide`, and `LL-37`; latest import result is `seededCompoundCount=51`, `appliedCount=51`, `unresolvedCount=0`.
+7. Latest successful networked runs remain:
+   - vendors: `ddf17efd-d5b7-48e9-abf3-4c601eea872f`
+   - finnrick: `13073ab4-1f9b-498e-8c81-5130b0c35333`
+8. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
-1. Re-running ingestion jobs and summarizing coverage deltas:
+1. Re-run quality gates and a fresh ingestion cycle:
+   - npm run typecheck
+   - npm run lint
+   - npm run test
    - npm run job:vendors
    - npm run job:finnrick
-   - npm run job:review-ai
-2. Confirming post-fix vendor counters (failed pages + unresolved aliases + offer persistence) against run `b307de3e-62ce-4958-a35b-62f1d9fa9fe8`.
-3. Prioritizing remaining highest-impact coverage gaps (especially runtime and unresolved-alias throughput) and updating docs/tests.
+2. Confirm whether new unresolved aliases appear after the fresh vendor run; if they do, triage in bounded slices (`npm run job:review-ai -- --limit=25`) and report unresolved reasons grouped by ambiguity vs missing canonical vs parsing noise.
+3. Prepare the single-vendor exclusion implementation plan (and optional SQL/report script) without blindly dropping valid but poorly named peptides; keep manual review checkpoints.
+4. Update docs with new run IDs, queue deltas, and exclusion-audit findings.
 ```

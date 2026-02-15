@@ -94,6 +94,11 @@ All notable changes to Stack Tracker are documented in this file.
 - Alias normalization now strips storefront noise (for example prices and CTA fragments like `add to cart`) before deterministic and AI matching.
 - Blend/stack and non-product listing aliases are auto-skipped for single-compound tracking integrity.
 - Added deterministic retatrutide shorthand fallback matching (`RT`, `GLP-3`, `NG-1 RT` context) to reduce avoidable review queue load.
+- Added deterministic shorthand fallback matching for:
+  - Tirzepatide (`TZ`, `tirz`, `GLP-1 TZ`, `NG-TZ`, `ER-TZ` context).
+  - Cagrilintide (`Cag`, `Cagrilinitide` misspelling context).
+- Added deterministic CJC-with-DAC alias normalization guard and HTML-entity stripping so titles like `CJC-1295 &#8211; With DAC (10mg)` resolve safely.
+- Expanded curated taxonomy seeds/mappings to include `Tirzepatide`, `Cagrilintide`, and `LL-37` canonical coverage.
 - Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 - Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
@@ -108,6 +113,8 @@ All notable changes to Stack Tracker are documented in this file.
 - Added optional runtime controls in env (`VENDOR_SCRAPE_CONCURRENCY`, `SCRAPE_RUN_STALE_TTL_MINUTES`, `SCRAPE_RUN_HEARTBEAT_SECONDS`, `SCRAPE_RUN_LAG_ALERT_SECONDS`).
 - `job:review-ai` now emits queue progress logging for large scans.
   - Progress logs now include elapsed time, processing rate, ETA, and last outcome/reason context.
+- `job:review-ai` now supports bounded queue slices via `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled triage runs.
+- Non-trackable supplement aliases with `pre-workout` phrasing are now deterministically auto-ignored to reduce repeated unresolved queue items.
 - Added automated operational-noise retention pruning in vendor runs:
   - Deletes aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
   - Deletes aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
@@ -123,7 +130,11 @@ All notable changes to Stack Tracker are documented in this file.
 - Verified alias triage throughput run:
   - `npm run job:review-ai` completed on `2026-02-15` with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s`.
   - Observed throughput: `82.86 items/min` (`~0.72s/item`), which is faster than the planning estimate (`~1.5s/item`) without code changes.
-  - Post-run `alias_match` queue totals: `open=516`, `in_progress=0`, `resolved=187`, `ignored=0`.
-- Verified post-key queue burn-down slices:
-  - Three 25-item slices after enabling `OPENAI_API_KEY`: `resolved=31`, `ignored=39`, `leftOpen=5`.
-  - Queue totals moved from `open=516` to `open=446` (`resolved=218`, `ignored=39`, `in_progress=0`).
+  - Post-baseline key-enabled burn-down and adjudication closed the queue (`alias_match`: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`).
+- Verified manual resolution policy for vendor-exclusive noise:
+  - Elite branded one-off formulas plus `Peak Power` and currently single-vendor `MK-777` are intentionally excluded (`ignored`) until/if cross-vendor evidence appears.
+- Verified ambiguous shorthand and malformed-title cases now resolve correctly:
+  - `GLP-1 TZ (10MG)` resolved to `tirzepatide`.
+  - `Cag (Cag (5MG))` resolved to `cagrilintide`.
+  - `LL-37` vendor `complex` phrasing resolves to canonical `ll-37`.
+  - `CJC-1295 &#8211; With DAC (10mg)` resolves to CJC with DAC after HTML-entity cleanup.

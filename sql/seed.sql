@@ -51,6 +51,9 @@ set
 insert into compounds (name, slug, description)
 values
   ('BPC-157', 'bpc-157', 'Body protection compound peptide listings across formulations.'),
+  ('Cagrilintide', 'cagrilintide', 'Amylin analog peptide listings and shorthand aliases like CAG.'),
+  ('LL-37', 'll-37', 'Host-defense peptide listings including vendor variants labeled as LL-37 Complex.'),
+  ('Tirzepatide', 'tirzepatide', 'Dual GIP/GLP-1 agonist peptide listings including shorthand aliases like tirz and GLP-1 TZ.'),
   ('Retatrutide', 'retatrutide', 'GLP-related investigational peptide listings.'),
   ('CJC-1295', 'cjc-1295', 'Growth-hormone-related peptide listings.'),
   ('Ipamorelin', 'ipamorelin', 'Peptide listings normalized by formulation.'),

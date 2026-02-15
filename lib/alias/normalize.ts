@@ -49,10 +49,15 @@ const STOREFRONT_NOISE_PATTERNS = [
   /\bquality[\s-]*driven research peptides\b/gi,
   /\bus finished\b/gi
 ];
+const HTML_ENTITY_PATTERN = /&(?:#\d+|#x[0-9a-f]+|[a-z]+);/gi;
 const PRICE_PATTERN = /\$\s*\d+(?:,\d{3})*(?:\.\d{1,2})?/g;
 const RETATRUTIDE_SHORTHAND_PATTERNS = [/\bretatrutide\b/i, /\breta\b/i, /\bglp[\s-]?3\b/i, /\bng[\s-]?1[\s-]?rt\b/i];
 const RETATRUTIDE_RT_CONTEXT_PATTERN = /\brt\b/i;
-const RETATRUTIDE_RT_CONTEXT_HINT_PATTERN = /\b(ng|glp|finished|reta|pharma)\b/i;
+const RETATRUTIDE_RT_CONTEXT_HINT_PATTERN = /\b(ng|glp|finished|reta|pharma|er|elite)\b/i;
+const TIRZEPATIDE_SHORTHAND_PATTERNS = [/\btirzepatide\b/i, /\btirz\b/i, /\bglp[\s-]?1\s*tz\b/i, /\bng[\s-]?tz\b/i];
+const TIRZEPATIDE_TZ_PATTERN = /\btz\b/i;
+const TIRZEPATIDE_TZ_CONTEXT_PATTERN = /\b(glp|tirz|ng|er|elite)\b/i;
+const NON_TRACKABLE_SUPPLEMENT_PATTERNS = [/\bpre[\s-]?workout\b/i];
 
 function collapseWhitespace(input: string): string {
   return input.trim().replace(/\s+/g, " ");
@@ -63,7 +68,7 @@ export function stripStorefrontNoise(input: string): string {
     return "";
   }
 
-  let text = input.replace(/\|/g, " ").replace(PRICE_PATTERN, " ");
+  let text = input.replace(HTML_ENTITY_PATTERN, " ").replace(/\|/g, " ").replace(PRICE_PATTERN, " ");
   for (const pattern of STOREFRONT_NOISE_PATTERNS) {
     text = text.replace(pattern, " ");
   }
@@ -96,6 +101,10 @@ export function stripAliasDescriptors(aliasNormalized: string): string {
       continue;
     }
 
+    if (/^x\d+$/.test(token) || /^\d+x$/.test(token)) {
+      continue;
+    }
+
     if (DESCRIPTOR_TOKENS.has(token)) {
       continue;
     }
@@ -118,6 +127,11 @@ export function isLikelyBlendOrStackProduct(input: string): boolean {
   }
 
   if (/\s\+\s/.test(lowered) || /\s\/\s/.test(lowered)) {
+    return true;
+  }
+
+  // Paired dose notation (for example 10mg/6.4mg) usually indicates combined actives.
+  if (/\b\d+(?:\.\d+)?\s?(mg|mcg|ug|g|iu|units?)\s*\/\s*\d+(?:\.\d+)?\s?\1\b/i.test(lowered)) {
     return true;
   }
 
@@ -146,9 +160,51 @@ export function isLikelyRetatrutideShorthand(input: string): boolean {
   return RETATRUTIDE_RT_CONTEXT_PATTERN.test(cleaned) && RETATRUTIDE_RT_CONTEXT_HINT_PATTERN.test(cleaned);
 }
 
-export function isLikelyNonProductListing(input: string): boolean {
+export function isLikelyTirzepatideShorthand(input: string): boolean {
+  if (!input) {
+    return false;
+  }
+
+  const cleaned = stripStorefrontNoise(input);
+  if (!cleaned) {
+    return false;
+  }
+
+  if (TIRZEPATIDE_SHORTHAND_PATTERNS.some((pattern) => pattern.test(cleaned))) {
+    return true;
+  }
+
+  return TIRZEPATIDE_TZ_PATTERN.test(cleaned) && TIRZEPATIDE_TZ_CONTEXT_PATTERN.test(cleaned);
+}
+
+export function isLikelyCagrilintideShorthand(input: string): boolean {
   const normalized = normalizeAlias(input);
   if (!normalized) {
+    return false;
+  }
+
+  const stripped = stripAliasDescriptors(normalized);
+  const candidate = stripped || normalized;
+  return candidate === "cag" || candidate.includes("cagrilintide") || candidate.includes("cagrilinitide");
+}
+
+export function isLikelyCjcWithDacAlias(input: string): boolean {
+  const stripped = stripAliasDescriptors(normalizeAlias(input));
+  if (!stripped) {
+    return false;
+  }
+
+  return stripped === "cjc 1295 with dac";
+}
+
+export function isLikelyNonProductListing(input: string): boolean {
+  const cleaned = stripStorefrontNoise(input);
+  const normalized = normalizeAlias(cleaned);
+  if (!normalized) {
+    return true;
+  }
+
+  if (NON_TRACKABLE_SUPPLEMENT_PATTERNS.some((pattern) => pattern.test(cleaned))) {
     return true;
   }
 

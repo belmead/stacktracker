@@ -135,15 +135,19 @@ Manual local run:
 npm run job:vendors
 npm run job:finnrick
 npm run job:review-ai
+npm run job:review-ai -- --limit=25
 ```
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
+Use `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled slices instead of scanning the full queue.
 If `OPENAI_API_KEY` is missing, AI classification falls back and queue burn-down quality drops sharply.
 
 Runtime observability:
 - `job:vendors` now emits run-level, page-level, and offer-level progress logs.
 - `job:review-ai` now emits queue-size progress with elapsed time, throughput, ETA, and last decision/reason context.
 - Baseline full review-ai run (`2026-02-15`, pre-key fix): `580` items scanned in `420.01s` (`82.86 items/min`, `~0.72s/item`) with `resolved=64`, `ignored=0`, `leftOpen=516`.
+- Queue burn-down is now complete after bounded slices plus manual adjudication:
+  - `alias_match`: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -212,7 +216,7 @@ npm run test
   - `compound_category_map_one_primary_per_compound` in `sql/schema.sql`.
 - Curated category taxonomy import is operational:
   - `npm run db:import-categories` now seeds/matches compounds and applies category mappings.
-  - Latest run applied `48`/`48` assignments with `0` unresolved.
+  - Latest run seeded `51` compounds, applied `51`/`51` assignments, with `0` unresolved.
 - Category browsing query behavior is now aligned with selector behavior:
   - `/categories` and `/categories/[slug]` include only compounds with active variants.
 - Admin category editor save flow now handles network/fetch failures with explicit error feedback.
@@ -230,10 +234,17 @@ npm run test
   - `npm run job:finnrick` succeeded with run `13073ab4-1f9b-498e-8c81-5130b0c35333`.
 - Latest `job:review-ai` completion (`2026-02-15`):
   - Baseline full run summary (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
-  - After enabling `OPENAI_API_KEY`, three 25-item slices processed `75` items with `resolved=31`, `ignored=39`, `leftOpen=5`.
-  - Queue totals now (`alias_match`): `open=446`, `in_progress=0`, `resolved=218`, `ignored=39`.
+  - Post-key bounded slices plus final manual adjudication closed the queue.
+  - Queue totals now (`alias_match`): `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+- Alias triage heuristics are now expanded for noisy vendor naming:
+  - Tirzepatide shorthand (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`) resolves to `tirzepatide`.
+  - Retatrutide shorthand retains context-aware support (`RT`, `GLP-3`, prefixed forms like `ER-RT`).
+  - `Cag`/`Cagrilinitide` resolves to `cagrilintide`.
+  - `LL-37 Complex` maps to canonical `LL-37`.
+  - HTML entities (for example `&#8211;`) are stripped before alias matching, fixing CJC with DAC normalization.
 - Alias policy now avoids database clutter from non-peptide noise:
   - Non-trackable storefront noise and merch are ignored (not persisted as offers/variants).
+  - `pre-workout` supplement aliases are now deterministically treated as non-trackable to avoid unresolved carry-over.
   - Aged ignored/resolved review rows and non-trackable alias memory are pruned automatically by retention settings.
 - Job reliability hardening is in place:
   - Stale `running` scrape runs are auto-reconciled to `failed` after TTL.
