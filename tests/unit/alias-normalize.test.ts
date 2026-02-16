@@ -36,6 +36,11 @@ describe("alias normalization", () => {
     expect(stripAliasDescriptors(normalized)).toBe("thymalin");
   });
 
+  it("preserves compound numeric identity while stripping dosage choice tails", () => {
+    const normalized = normalizeAlias("BPC-157 Peptide 5mg/10mg/20mg");
+    expect(stripAliasDescriptors(normalized)).toBe("bpc 157");
+  });
+
   it("strips count suffixes like x30/x100", () => {
     const normalized = normalizeAlias("Tesofensine Tablets x100");
     expect(stripAliasDescriptors(normalized)).toBe("tesofensine");
@@ -74,6 +79,10 @@ describe("alias normalization", () => {
 
   it("strips storefront CTA and pricing noise", () => {
     expect(stripStorefrontNoise("US Finished NG-1 RT $500.00 Add to Cart Add to cart")).toBe("NG-1 RT");
+  });
+
+  it("strips batch-note and kit storefront noise", () => {
+    expect(stripStorefrontNoise("Selank 10mg (Current batch tested at 12mg) with Air Dispersal Kit")).toBe("Selank 10mg");
   });
 
   it("strips html entities from storefront text", () => {

@@ -29,7 +29,7 @@ All notable changes to Stack Tracker are documented in this file.
 - Data model and SQL:
   - Full schema in `sql/schema.sql`.
   - Seed data in `sql/seed.sql` including initial three vendor URLs.
-  - Seed expansion now includes a first vetted 10-vendor storefront batch (13 active vendors / 21 active vendor pages total).
+  - Seed expansion now includes two vetted storefront batches (18 active vendors / 26 active vendor pages total).
 - Operations and tooling:
   - `npm run db:bootstrap` to apply schema + seed without direct `psql` usage.
   - Job scripts load `.env.local` via `--env-file-if-exists`.
@@ -74,6 +74,7 @@ All notable changes to Stack Tracker are documented in this file.
   - `tests/unit/worker-alerts.test.ts` validates batched alias-alert HTML formatting/truncation.
 - Expanded alias regression coverage:
   - `tests/unit/alias-normalize.test.ts` now validates additional tirzepatide shorthand variants (`GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`), CJC no-DAC Mod-GRF phrasing, and new cosmetic/non-product patterns.
+  - `tests/unit/alias-normalize.test.ts` now also validates canonical numeric-token preservation (`BPC-157` dosage-choice tails) and batch-note/kit storefront-noise stripping (`Current batch tested at ...`, `Air Dispersal Kit`).
 - Expanded-run robustness report:
   - `reports/robustness/expanded-vendor-robustness-2026-02-16.md` with per-vendor ingest/alias metrics, queue deltas, and zero-offer diagnostics.
 
@@ -116,9 +117,17 @@ All notable changes to Stack Tracker are documented in this file.
   - `Acetyl Hexapeptide-8 (Argireline)` -> `argireline`
   - `Pal Tetrapeptide-7 (Matrixyl 3000)` -> `pal-tetrapeptide-7`
 - Alias descriptor stripping now removes generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`) before deterministic matching.
+- Alias descriptor stripping now preserves canonical numeric identity tokens while still removing dosage-choice tails (for example `BPC-157 Peptide 5mg/10mg/20mg` -> `bpc 157`).
+- Storefront-noise stripping now removes batch-note and kit phrasing (`Current batch tested at ...`, `with Air Dispersal Kit`) before deterministic/AI matching.
 - Expanded curated taxonomy seeds/mappings to include `Tirzepatide`, `Cagrilintide`, and `LL-37` canonical coverage.
 - Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
 - Vendor seed targets now include the first 10-vendor expansion batch from the vetted storefront list in `README.md`.
+- Vendor seed targets now include a second vetted 5-vendor expansion batch from the same vetted storefront list:
+  - `https://evolvebiopep.com/`
+  - `https://purapeptides.com/`
+  - `https://nusciencepeptides.com/`
+  - `https://peptides4research.com/`
+  - `https://atomiklabz.com/`
 - Compound seed set now includes additional legitimate compounds discovered during expansion triage (including `semaglutide`, `cagrisema`, `thymalin`, `mazdutide`, `survodutide`, and related canonicals).
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 - Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
@@ -156,6 +165,7 @@ All notable changes to Stack Tracker are documented in this file.
   - `npm run lint`
   - `npm run test`
 - Verified networked ingestion execution in full-access mode:
+  - Expanded run (second onboarding pass): `npm run job:vendors` completed with `scrapeRunId=37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Expanded run: `npm run job:vendors` completed with `scrapeRunId=d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Expanded run: `npm run job:finnrick` succeeded with `scrapeRunId=5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
   - `npm run job:vendors` succeeded (`scrapeRunId=3178fe72-36db-4335-8fff-1b3fe6ec640a`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
@@ -165,6 +175,8 @@ All notable changes to Stack Tracker are documented in this file.
   - Intermediate delta: `open -30`, `resolved +12`, `ignored +18`.
   - One bounded triage attempt failed with `canceling statement due to statement timeout`; subsequent reruns completed.
   - Final follow-up triage + taxonomy onboarding closed the queue: `open=0`, `resolved=437`, `ignored=353`.
+  - Second expansion-cycle triage closed reopened queue `open=16` -> `open=0` with final totals `resolved=440`, `ignored=366`.
+  - Second-pass triage detail: first bounded run left all `16` open (`ai_review_cached`), deterministic normalization fixes resolved `3`, and manual adjudication ignored the final `13` branded/ambiguous aliases.
   - `GLP1-S` / `GLP-1 (S)` aliases now resolve to canonical `semaglutide`.
   - `cagrisema` is currently retained as a tracked canonical blend compound.
 - Verified alias triage throughput run:

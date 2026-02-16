@@ -25,7 +25,12 @@ values
   ('Bulk Peptide Supply', 'bulk-peptide-supply', 'https://bulkpeptidesupply.com/'),
   ('Coastal Peptides', 'coastal-peptides', 'https://coastalpeptides.com/'),
   ('My Oasis Labs', 'my-oasis-labs', 'https://myoasislabs.com/'),
-  ('PeptiLab Research', 'peptilab-research', 'https://peptilabresearch.com/')
+  ('PeptiLab Research', 'peptilab-research', 'https://peptilabresearch.com/'),
+  ('Evolve BioPep', 'evolve-biopep', 'https://evolvebiopep.com/'),
+  ('Pura Peptides', 'pura-peptides', 'https://purapeptides.com/'),
+  ('NuScience Peptides', 'nuscience-peptides', 'https://nusciencepeptides.com/'),
+  ('Peptides 4 Research', 'peptides-4-research', 'https://peptides4research.com/'),
+  ('Atomik Labz', 'atomik-labz', 'https://atomiklabz.com/')
 on conflict (slug) do update
 set
   name = excluded.name,
@@ -55,7 +60,12 @@ with desired_vendor_pages as (
       ('bulk-peptide-supply', 'https://bulkpeptidesupply.com/', 'catalog'),
       ('coastal-peptides', 'https://coastalpeptides.com/', 'catalog'),
       ('my-oasis-labs', 'https://myoasislabs.com/', 'catalog'),
-      ('peptilab-research', 'https://peptilabresearch.com/', 'catalog')
+      ('peptilab-research', 'https://peptilabresearch.com/', 'catalog'),
+      ('evolve-biopep', 'https://evolvebiopep.com/', 'catalog'),
+      ('pura-peptides', 'https://purapeptides.com/', 'catalog'),
+      ('nuscience-peptides', 'https://nusciencepeptides.com/', 'catalog'),
+      ('peptides-4-research', 'https://peptides4research.com/', 'catalog'),
+      ('atomik-labz', 'https://atomiklabz.com/', 'catalog')
   ) as t(vendor_slug, url, page_type)
 )
 insert into vendor_pages (vendor_id, url, page_type)

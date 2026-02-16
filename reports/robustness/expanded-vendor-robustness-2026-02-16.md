@@ -1,81 +1,84 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
 ## Scope
-- Expansion batch: 10 additional vetted US storefront/API vendors added to `sql/seed.sql`.
-- Vendor run: `d515a861-ad68-4d28-9155-d2439bfe0f4a` (manual/safe).
-- Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589`.
+- Second expansion batch: 5 additional vetted US storefront/API vendors added to `sql/seed.sql`:
+  - `evolvebiopep.com`
+  - `purapeptides.com`
+  - `nusciencepeptides.com`
+  - `peptides4research.com`
+  - `atomiklabz.com`
+- Vendor run: `37c41def-d773-4d16-9556-4d45d5902a3f` (manual/safe).
+- Finnrick run: intentionally deferred during this scrape-expansion pass.
+
+## Coverage Delta
+- Previous expansion baseline: `13` active vendors / `21` active vendor pages.
+- Current coverage after reseed: `18` active vendors / `26` active vendor pages.
+- Vendors with active offers after run: `18`.
 
 ## Run Summary
-### Vendors job (`d515a861-ad68-4d28-9155-d2439bfe0f4a`)
+### Vendors job (`37c41def-d773-4d16-9556-4d45d5902a3f`)
 - `status=partial`
-- `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `policyBlocked=0`
-- `offersCreated=425`, `offersUpdated=0`, `offersUnchanged=116`, `offersExcludedByRule=0`
-- `unresolvedAliases=73`, `aliasesSkippedByAi=231`, `aiTasksQueued=1`
-- Runtime window: `2026-02-16T01:27:36.175Z` -> `2026-02-16T01:53:23.735Z`
+- `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `policyBlocked=0`
+- `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `offersExcludedByRule=0`
+- `unresolvedAliases=16`, `aliasesSkippedByAi=339`, `aiTasksQueued=1`
+- Runtime window: `2026-02-16T02:41:29.132Z` -> `2026-02-16T02:55:03.956Z` (~`815.7s`)
 
-### Finnrick job (`5233e9be-24fb-42ba-9084-2e8dde507589`)
-- `status=success`
-- `vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`
+### Queue delta (`queue_type='alias_match'`)
+#### Baseline before vendor run
+- `open=0`, `resolved=437`, `ignored=353`
+
+#### After vendor run, before triage
+- `open=16`, `resolved=437`, `ignored=353`
+
+#### Triage execution
+- `npm run job:review-ai -- --limit=50` (pass 1): `itemsScanned=16`, `resolved=0`, `ignored=0`, `leftOpen=16`
+- Alias robustness fix applied (details below), then:
+- `npm run job:review-ai -- --limit=50` (pass 2): `itemsScanned=16`, `resolved=3`, `ignored=0`, `leftOpen=13`
+- Manual adjudication pass: `ignored=13` (all remaining open items)
+- Verification pass: `npm run job:review-ai -- --limit=50` -> `itemsScanned=0`, `leftOpen=0`
+
+#### Final post-triage state
+- `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`
+- Net delta from pre-run baseline: `open 0`, `resolved +3`, `ignored +13`
 
 ## Per-Vendor Robustness Metrics
 | Vendor | Active offers | Unresolved aliases (run) | Skipped by AI (run) | Failure/policy signals | Discovery source |
 | --- | ---: | ---: | ---: | --- | --- |
-| Bulk Peptide Supply | 41 | 4 | 29 | none | woocommerce_store_api |
-| Coastal Peptides | 13 | 8 | 4 | none | woocommerce_store_api |
+| Atomik Labz | 75 | 10 | 42 | none | woocommerce_store_api |
+| Bulk Peptide Supply | 45 | 0 | 29 | none | woocommerce_store_api |
+| Coastal Peptides | 19 | 0 | 6 | none | woocommerce_store_api |
 | Elite Research USA | 52 | 0 | 19 | `NO_OFFERS=1` | html |
-| Eternal Peptides | 26 | 4 | 3 | none | woocommerce_store_api |
-| My Oasis Labs | 35 | 2 | 11 | none | woocommerce_store_api |
+| Eternal Peptides | 28 | 0 | 5 | none | woocommerce_store_api |
+| Evolve BioPep | 26 | 4 | 10 | none | woocommerce_store_api |
+| My Oasis Labs | 36 | 0 | 12 | none | woocommerce_store_api |
 | NexGen Peptides | 24 | 0 | 15 | none | woocommerce_store_api (origin reuse events: 5) |
+| NuScience Peptides | 44 | 2 | 16 | none | woocommerce_store_api |
 | Peptide Labs X | 40 | 0 | 26 | none | woocommerce_store_api (origin reuse events: 2) |
-| Peptidology | 30 | 8 | 14 | none | woocommerce_store_api |
-| PeptiLab Research | 25 | 1 | 14 | none | woocommerce_store_api |
-| Planet Peptide | 45 | 2 | 10 | none | woocommerce_store_api |
-| Pure Tested Peptides | 140 | 15 | 20 | none | woocommerce_store_api |
-| Simple Peptide | 41 | 12 | 49 | none | woocommerce_store_api |
-| Verified Peptides | 29 | 17 | 17 | none | woocommerce_store_api |
-
-## Queue Delta (Alias Match)
-### Baseline before expanded vendor run
-- `open=0`, `resolved=384`, `ignored=333`
-
-### After vendor run, before triage
-- `open=73`, `resolved=384`, `ignored=333`
-
-### Triage execution
-- `npm run job:review-ai -- --limit=50` (pre-fix run): `resolved=0`, `ignored=0`, `leftOpen=50`
-- Heuristic/cached-evaluation fix applied (details below), then:
-- `npm run job:review-ai -- --limit=50`: `resolved=8`, `ignored=17`, `leftOpen=25`
-- `npm run job:review-ai -- --limit=25`: `resolved=0`, `ignored=0`, `leftOpen=25`
-- `npm run job:review-ai`: `resolved=2`, `ignored=2`, `leftOpen=44`
-- `npm run job:review-ai`: `resolved=1`, `ignored=0`, `leftOpen=43`
-- Taxonomy onboarding + rule expansion applied, then:
-- `npm run job:review-ai`: `resolved=35`, `ignored=2`, `leftOpen=6`
-- `npm run job:review-ai`: `resolved=4`, `ignored=2`, `leftOpen=0`
-- One additional `--limit=50` attempt failed with `canceling statement due to statement timeout`.
-- Manual correction applied for false-ignore edge case: GHK-Cu review row set to `resolved` (admin) to preserve single-compound tracking.
-- Manual correction applied for two cached-non-trackable rows: `THYMALIN 10 mg (10 vials)` and `CAGRISEMA 10 mg (10 vials)` were re-resolved to canonical compounds.
-
-### Final post-triage state
-- `open=0`, `resolved=437`, `ignored=353`
-- Net delta from pre-triage: `open -73`, `resolved +53`, `ignored +20`
-- Remaining open reason group: none
+| Peptides 4 Research | 26 | 0 | 11 | none | woocommerce_store_api |
+| Peptidology | 38 | 0 | 14 | none | woocommerce_store_api |
+| PeptiLab Research | 26 | 0 | 14 | none | woocommerce_store_api |
+| Planet Peptide | 47 | 0 | 10 | none | woocommerce_store_api |
+| Pura Peptides | 50 | 0 | 6 | none | woocommerce_store_api |
+| Pure Tested Peptides | 149 | 0 | 26 | none | woocommerce_store_api |
+| Simple Peptide | 44 | 0 | 58 | none | woocommerce_store_api |
+| Verified Peptides | 43 | 0 | 20 | none | woocommerce_store_api |
 
 ## Vendors/Pages With Zero Offers
 - `Elite Research USA` page: `https://eliteresearchusa.com/products`
   - `last_status=no_data`, `NO_OFFERS` event emitted, AI task queued.
-  - Likely cause: this path currently does not expose parseable/API product payload under safe-mode extraction, while root (`http://eliteresearchusa.com/`) still yields valid Inertia/HTML offers.
+  - Likely cause: this path still does not expose parseable/API product payload under safe-mode extraction, while root (`http://eliteresearchusa.com/`) continues to produce valid HTML/Inertia offers.
 
 ## Robustness Fixes Applied During Validation
-- Cached review handling in alias resolver now allows deterministic rules to run before returning `ai_review_cached`.
-  - Impact: deterministic rules can now drain previously cached queue items without forcing repeated AI calls.
-- Added deterministic blend/stack ignore path using explicit blend markers (`blend|stack|combo|mix`, plus-delimited, slash-delimited).
-- Added deterministic CJC no-DAC mapping support for Mod GRF phrasing.
-- Expanded tirzepatide shorthand coverage to include `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and parenthesized `GLP-2 (T)` forms.
-- Added deterministic semaglutide shorthand coverage for `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
-- Added deterministic canonical mapping for `argireline` and `pal-tetrapeptide-7`.
-- Added descriptor stripping for generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`).
-- Expanded non-product listing detection for cosmetic/noise patterns seen in this run (for example dissolving strips, body cream, hair-growth formulation, conditioner, eye-glow, t-shirt).
-- Kept `cagrisema` as a tracked canonical blend compound for now.
+- Alias descriptor stripping now preserves compound numeric identity when numeric token is part of the name:
+  - Example fixed: `BPC-157 Peptide 5mg/10mg/20mg` now strips to `bpc 157` (not `bpc`).
+- Storefront-noise stripping now removes Atomik batch-note/kit text:
+  - `Current batch tested at ...`
+  - `with Air Dispersal Kit`
+- Regression coverage added in `tests/unit/alias-normalize.test.ts` for both fixes.
+- Deterministic re-triage resolved previously cached-open canonical aliases:
+  - `Sermorelin ... with Air Dispersal Kit` -> `sermorelin`
+  - `Selank ... with Air Dispersal Kit` -> `selank`
+  - `BPC-157 Peptide 5mg/10mg/20mg` -> `bpc-157`
 
-## New Alias Patterns Requiring Additional Coverage
-All high-frequency unresolved patterns identified in this expansion pass were covered by taxonomy onboarding + deterministic alias updates, and the alias queue is currently closed.
+## Remaining Open Reason Groups
+- None (`open=0`).

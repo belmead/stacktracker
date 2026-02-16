@@ -210,15 +210,17 @@ Internal jobs:
 - `job:review-ai` now supports bounded slices via `--limit=<N>` / `REVIEW_AI_LIMIT`.
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
-- First coverage expansion batch is onboarded in seed data:
-  - Added 10 vetted storefront/API vendors (coverage moved from 3 vendors / 10 pages to 13 vendors / 21 pages).
-- Expanded ingestion robustness cycle (`2026-02-16`) ran with:
-  - Vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
-  - Finnrick run `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
-- Alias queue delta in expansion cycle:
-  - Before triage: `open=73`, `resolved=384`, `ignored=333`.
-  - Final after bounded/full triage + taxonomy onboarding: `open=0`, `resolved=437`, `ignored=353`.
-  - Net expansion triage delta: `open -73`, `resolved +53`, `ignored +20`.
+- Coverage expansion batches are onboarded in seed data:
+  - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
+  - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).
+- Expanded ingestion robustness cycles (`2026-02-16`) ran with:
+  - Batch 1 vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
+  - Batch 2 vendor run `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
+  - Latest Finnrick run remains `5233e9be-24fb-42ba-9084-2e8dde507589` and is intentionally deferred during active scrape-expansion passes.
+- Alias queue delta across expansion cycles:
+  - Batch 1: `open=73` -> `open=0` (net `resolved +53`, `ignored +20`).
+  - Batch 2: `open=16` -> `open=0` (net `resolved +3`, `ignored +13`).
+  - Current totals: `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
 - Additional robustness hardening from expansion findings:
   - Cached `needs_review` aliases now allow deterministic heuristics before returning `ai_review_cached`.
   - Deterministic tirzepatide shorthand coverage now includes `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and `GLP-2 (T)` forms.
@@ -226,6 +228,8 @@ Internal jobs:
   - Deterministic CJC no-DAC mapping now supports Mod-GRF phrasing.
   - Deterministic canonical mapping now covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
   - Alias descriptor stripping now drops generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`).
+  - Alias descriptor stripping now preserves canonical numeric tokens when part of a compound identity (for example `BPC-157`), while still removing dosage-choice tails.
+  - Storefront-noise stripping now removes `Current batch tested at ...` and `with Air Dispersal Kit` descriptor text.
   - Non-product detection expanded for cosmetic/strip storefront noise.
   - `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide).
 - AI triage reliability fix is in place:

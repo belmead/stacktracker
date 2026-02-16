@@ -49,7 +49,9 @@ const STOREFRONT_NOISE_PATTERNS = [
   /\bbuy now\b/gi,
   /\bthis product has multiple variants[^.]*\.?/gi,
   /\bquality[\s-]*driven research peptides\b/gi,
-  /\bus finished\b/gi
+  /\bus finished\b/gi,
+  /\(?\s*current\s+batch\s+tested\s+at\s+\d+(?:\.\d+)?\s?(?:mg|mcg|ug|g|ml|iu|units?)\s*\)?/gi,
+  /\bwith\s+air\s+dispersal\s+kit\b/gi
 ];
 const HTML_ENTITY_PATTERN = /&(?:#\d+|#x[0-9a-f]+|[a-z]+);/gi;
 const PRICE_PATTERN = /\$\s*\d+(?:,\d{3})*(?:\.\d{1,2})?/g;
@@ -110,6 +112,7 @@ export function stripAliasDescriptors(aliasNormalized: string): string {
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     const next = tokens[index + 1];
+    const prev = tokens[index - 1];
 
     if (/^\d+(?:\.\d+)?(mg|mcg|ug|g|ml|iu|units?)$/.test(token)) {
       continue;
@@ -120,7 +123,17 @@ export function stripAliasDescriptors(aliasNormalized: string): string {
       continue;
     }
 
-    if (/^\d+(?:\.\d+)?$/.test(token) && next && DESCRIPTOR_TOKENS.has(next)) {
+    const isStandaloneNumericToken = /^\d+(?:\.\d+)?$/.test(token);
+    const hasPackOrUnitContextBefore =
+      !!prev &&
+      (UNIT_TOKENS.has(prev) ||
+        DESCRIPTOR_TOKENS.has(prev) ||
+        /^\d+(?:\.\d+)?(mg|mcg|ug|g|ml|iu|units?)$/.test(prev) ||
+        /^x\d+$/.test(prev) ||
+        /^\d+x$/.test(prev));
+    const isTrailingPackCount = index === tokens.length - 2;
+
+    if (isStandaloneNumericToken && next && DESCRIPTOR_TOKENS.has(next) && (hasPackOrUnitContextBefore || isTrailingPackCount)) {
       continue;
     }
 

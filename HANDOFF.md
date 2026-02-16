@@ -5,13 +5,53 @@
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUpdated=0`, `offersUnchanged=116`, `offersExcludedByRule=0`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`, `aiTasksQueued=1`, ~`1548.4s` runtime).
+- Most recent completed vendor run: `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `offersExcludedByRule=0`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`, `aiTasksQueued=1`, ~`815.7s` runtime).
 - Most recent successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`).
 - Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=437`, `ignored=353`.
+- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
+- Current seeded coverage: `18` active vendors / `26` active vendor pages.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
 - Operational note: hold additional `job:finnrick` runs until vendor scrape expansion work is complete.
+
+## Expansion Robustness Update (2026-02-16, second vetted batch)
+- Onboarded 5 additional vetted storefront/API vendors in `sql/seed.sql`:
+  - `evolvebiopep.com`, `purapeptides.com`, `nusciencepeptides.com`, `peptides4research.com`, `atomiklabz.com`.
+- Coverage moved from `13` vendors / `21` pages to `18` vendors / `26` pages after `npm run db:bootstrap`.
+- Robustness cycle executed:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run job:vendors` -> `37c41def-d773-4d16-9556-4d45d5902a3f`
+  - bounded triage slices (`npm run job:review-ai -- --limit=50`)
+  - no `job:finnrick` run (intentionally deferred during expansion)
+- Queue delta for this expansion pass:
+  - Pre-triage baseline: `open=0`, `resolved=437`, `ignored=353`.
+  - After vendor run (pre-triage): `open=16`, `resolved=437`, `ignored=353`.
+  - Final post-triage: `open=0`, `resolved=440`, `ignored=366`.
+  - Net: `resolved +3`, `ignored +13`.
+- Alias robustness hardening applied in code:
+  - descriptor stripping now preserves compound numeric identity for canonical names like `BPC-157` while still removing dosage-choice tails (`5mg/10mg/20mg`);
+  - storefront-noise stripping now removes `Current batch tested at ...` and `with Air Dispersal Kit` descriptor text;
+  - regression coverage added in `tests/unit/alias-normalize.test.ts` for both cases.
+- Manual adjudication (`ignored`) applied to the 13 remaining branded/ambiguous items after deterministic fixes:
+  - `GhRIP Gh Pathway Research Peptide System 21mg`
+  - `GLOW Dermal Peptide Research Complex`
+  - `illumiNeuro Neuropeptide Research Complex 50mg`
+  - `SSM-x31 Systematic Signaling Metabolic Research Compound 10mg`
+  - `LIQUID Zeus 485mg per ml (20ml)`
+  - `LIQUID Hercules 625mg per ml (20ml)`
+  - `LIQUID Minotaur 445mg per ml (20ml)`
+  - `LIQUID Lipo Extreme 500mg (20ml)`
+  - `LIQUID Essence 245.4mg (20ml)`
+  - `Adamax 10mg`
+  - `GLP-4 (C) (5mg/5mg)`
+  - `P-21 12mg`
+  - `Livagen (Bioregulator) 20mg`
+- Verification run:
+  - `npm run job:review-ai -- --limit=50` -> `itemsScanned=0`, `leftOpen=0`.
+- Detailed robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 
 ## Expansion Robustness Update (2026-02-16, first 10-vendor batch)
 - Onboarded 10 additional vetted storefront/API vendors in `sql/seed.sql`:
@@ -511,30 +551,35 @@ Start by reading:
 
 Current state to assume:
 1. Alias triage queue is fully burned down again:
-   - Current totals: `open=0`, `in_progress=0`, `resolved=437`, `ignored=353`.
+   - Current totals: `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
 2. Heuristics now cover noisy GLP shorthand and vendor euphemisms:
    - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`
    - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ` / `ER-TZ`
    - semaglutide: `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`
    - cagrilintide: `Cag` / `Cagrilinitide` misspelling
-3. HTML entities are stripped during normalization, which fixed `CJC-1295 &#8211; With DAC (10mg)` matching.
-4. Canonical mapping now treats `LL-37 Complex` as `LL-37`; deterministic mapping also covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
-5. `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide) for now.
-6. Category importer + seeds include newly onboarded canonical compounds from expansion triage (for example `semaglutide`, `thymalin`, `mazdutide`, `survodutide`, `cagrisema`, `ghr-2`, `ghr-6`, `ara-290`).
-7. Latest networked runs:
-   - vendors (expanded batch): `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`)
+3. Alias descriptor stripping now preserves canonical numeric identities while removing dosage-choice tails:
+   - `BPC-157 Peptide 5mg/10mg/20mg` strips to `bpc 157` (not `bpc`).
+4. Storefront-noise stripping now removes Atomik batch-note text:
+   - `Current batch tested at ...`
+   - `with Air Dispersal Kit`
+5. HTML entities are stripped during normalization, which fixed `CJC-1295 &#8211; With DAC (10mg)` matching.
+6. Canonical mapping now treats `LL-37 Complex` as `LL-37`; deterministic mapping also covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
+7. `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide) for now.
+8. Category importer + seeds include newly onboarded canonical compounds from expansion triage (for example `semaglutide`, `thymalin`, `mazdutide`, `survodutide`, `cagrisema`, `ghr-2`, `ghr-6`, `ara-290`).
+9. Latest networked runs:
+   - vendors (expanded batch, second onboarding pass): `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`)
    - latest fully successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
    - finnrick: `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun during scrape-expansion unless explicitly requested)
-8. Cross-vendor exclusion framework is in place and manual-gated:
+10. Cross-vendor exclusion framework is in place and manual-gated:
    - command: `npm run job:exclusion-audit`
    - latest report: `reports/exclusion-audit/single-vendor-audit-latest.md`
    - compile approved exclusions with `npm run job:exclusion-enforce`
    - runtime rules file: `config/manual-offer-exclusions.json`
    - currently compiled rules: `0`
-9. Coverage after first expansion batch:
-   - active vendors: `13`
-   - active vendor pages: `21`
-10. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
+11. Coverage after second expansion batch:
+   - active vendors: `18`
+   - active vendor pages: `26`
+12. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
 1. Expand vendor coverage with the next onboarding batch from README’s vetted storefront list, adding vendor + page targets in `sql/seed.sql`.
