@@ -183,7 +183,7 @@ Internal jobs:
 - UI stage: minimal wireframe with tokenized styles.
 - Typography note: reserve slot for future Geist Pixel application in polish phase.
 
-## 10. Current Implementation Status (as of 2026-02-15)
+## 10. Current Implementation Status (as of 2026-02-16)
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
 - Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
@@ -211,11 +211,26 @@ Internal jobs:
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
 - After enabling `OPENAI_API_KEY`, bounded slices plus manual adjudication completed alias triage queue burn-down.
-- Current `alias_match` queue totals: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+- Fresh ingestion rerun on `2026-02-15` reopened alias-review work:
+  - Pre-rerun baseline: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+  - Post-fix + bounded triage totals: `open=7`, `in_progress=0`, `resolved=384`, `ignored=326`.
+  - Remaining open items are currently grouped under `payload.reason='ai_review_cached'`.
+- Final manual adjudication pass (2026-02-16) closed the reopened queue:
+  - Current totals: `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
+  - The 7 branded carry-over aliases are now cached as admin-resolved non-trackable aliases to prevent re-queue churn.
+- AI triage reliability fix is in place:
+  - Long-model `reason` strings no longer trigger parse fallback to `ai_unavailable_fallback`.
+  - Chat-completions fallback request removed unsupported `temperature=0` for `gpt-5-mini`.
 - Vendor runs now prune aged operational-noise history (`review_queue` resolved/ignored + non-trackable alias rows) via retention env settings.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
-- Vendor ingestion has a recent successful run (`ddf17efd-d5b7-48e9-abf3-4c601eea872f`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`.
-- Finnrick ingestion has a recent successful run (`13073ab4-1f9b-498e-8c81-5130b0c35333`) under full-access network execution.
+- Vendor ingestion has a recent successful run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`.
+- Finnrick ingestion has a recent successful run (`8a108444-b26a-4f2a-94a9-347cc970a140`) under full-access network execution.
+- Cross-vendor exclusion-rule work is started with a report-only audit script:
+  - `npm run job:exclusion-audit` generates `reports/exclusion-audit/single-vendor-audit-latest.md`.
+  - Latest audit (`2026-02-16T01:01:59Z`) found `23` single-vendor compounds across `28` offers.
+  - Enforcement remains manual-gated and now has an explicit compilation step:
+    - `npm run job:exclusion-enforce` compiles only reviewer-approved exclusions into `config/manual-offer-exclusions.json`.
+    - Vendor ingestion loads active rules from that config and skips/deactivates matched product URLs.
 - Remaining prerequisite for first full ingestion cycle is infrastructure:
   - Working Postgres endpoint (Supabase recommended).
   - Project env vars populated in Vercel and local `.env.local`.

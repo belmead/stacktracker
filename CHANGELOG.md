@@ -47,6 +47,12 @@ All notable changes to Stack Tracker are documented in this file.
   - `POST /api/admin/categories`
 - Vendor audit utility script:
   - `scripts/finnrick-vendor-audit.js` for Finnrick vendor extraction, filtering, website discovery, platform detection, and API probing.
+- Single-vendor exclusion audit utility:
+  - `scripts/run-single-vendor-exclusion-audit.ts` plus `npm run job:exclusion-audit`.
+  - Produces report-only JSON/Markdown snapshots in `reports/exclusion-audit/` and marks every candidate as manual-confirmation-required (no automatic exclusion enforcement).
+- Single-vendor exclusion enforcement utility:
+  - `scripts/run-single-vendor-exclusion-enforcement.ts` plus `npm run job:exclusion-enforce`.
+  - Compiles only reviewer-approved exclusions (`manualDecision.status='approved_exclusion'`) into `config/manual-offer-exclusions.json`.
 - DB maintenance script:
   - `sql/maintenance/cleanup-legacy-peptides.sql` for safe cleanup of legacy `public.peptides` table (preflight, backup, dependency checks, guarded drop).
 - Category import script:
@@ -118,6 +124,14 @@ All notable changes to Stack Tracker are documented in this file.
 - Added automated operational-noise retention pruning in vendor runs:
   - Deletes aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
   - Deletes aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
+- Vendor ingestion now supports manual exclusion-rule enforcement by exact product URL:
+  - Loads active rules from `config/manual-offer-exclusions.json`.
+  - Skips persisting matching offers (`OFFER_EXCLUDED_RULE`) and deactivates existing rows for those URLs.
+- AI classifier fallback reliability was hardened:
+  - Long `reason` outputs no longer fail local parsing (truncated safely to 200 chars).
+  - Chat-completions fallback removed unsupported `temperature=0` for `gpt-5-mini`.
+- `job:review-ai` now refreshes payload metadata for items left open after triage:
+  - Updates reason/confidence and triage timestamp so unresolved reason-group reporting reflects current classification outcomes.
 
 ### Verified
 - Passing checks under Node 20:
@@ -125,14 +139,29 @@ All notable changes to Stack Tracker are documented in this file.
   - `npm run lint`
   - `npm run test`
 - Verified networked ingestion execution in full-access mode:
-  - `npm run job:vendors` succeeded (`scrapeRunId=ddf17efd-d5b7-48e9-abf3-4c601eea872f`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
-  - `npm run job:finnrick` succeeded (`scrapeRunId=13073ab4-1f9b-498e-8c81-5130b0c35333`).
+  - `npm run job:vendors` succeeded (`scrapeRunId=3178fe72-36db-4335-8fff-1b3fe6ec640a`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
+  - `npm run job:finnrick` succeeded (`scrapeRunId=8a108444-b26a-4f2a-94a9-347cc970a140`).
 - Verified alias triage throughput run:
   - `npm run job:review-ai` completed on `2026-02-15` with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s`.
   - Observed throughput: `82.86 items/min` (`~0.72s/item`), which is faster than the planning estimate (`~1.5s/item`) without code changes.
   - Post-baseline key-enabled burn-down and adjudication closed the queue (`alias_match`: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`).
+- Verified bounded post-rerun triage delta:
+  - `npm run job:review-ai -- --limit=25` scanned `14` items and returned `resolved=1`, `ignored=1`, `leftOpen=12` (`durationSeconds=76.56`).
+  - Queue delta from rerun baseline (`open=0`, `resolved=383`, `ignored=320`) is now `open +12`, `resolved +1`, `ignored +1`.
+  - After classifier fix + reruns, unresolved queue moved to `open=7`, `resolved=384`, `ignored=326` with reason `ai_review_cached`.
+  - Final manual adjudication of those 7 items restored queue closure (`open=0`, `in_progress=0`, `resolved=384`, `ignored=333`).
+  - A follow-up vendor run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) completed with `unresolvedAliases=0`, confirming no immediate re-queue.
 - Verified manual resolution policy for vendor-exclusive noise:
   - Elite branded one-off formulas plus `Peak Power` and currently single-vendor `MK-777` are intentionally excluded (`ignored`) until/if cross-vendor evidence appears.
+- Verified manual-ignore persistence hardening:
+  - Ignored review actions now persist admin non-trackable alias memory (`compound_aliases.status='resolved'`, `source='admin'`), reducing repeat queue churn on branded aliases.
+- Verified single-vendor exclusion audit bootstrap:
+  - Latest report (`reports/exclusion-audit/single-vendor-audit-latest.md`, `2026-02-16T01:01:59Z`) scanned `115` active offers across `50` active compounds.
+  - Found `23` single-vendor compounds (`28` offers) and classified all as manual-decision `pending`.
+  - No exclusions were enforced automatically; manual confirmation remains required before any rule application.
+- Verified manual exclusion enforcement bootstrap:
+  - `npm run job:exclusion-enforce` wrote `config/manual-offer-exclusions.json` from the latest audit report.
+  - With no approved entries yet, compiled exclusion rule count is `0` (safe no-op).
 - Verified ambiguous shorthand and malformed-title cases now resolve correctly:
   - `GLP-1 TZ (10MG)` resolved to `tirzepatide`.
   - `Cag (Cag (5MG))` resolved to `cagrilintide`.

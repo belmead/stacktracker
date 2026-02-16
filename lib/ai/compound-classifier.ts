@@ -29,7 +29,7 @@ const classificationSchema = z.object({
   canonical_slug: z.string().nullable(),
   alias: z.string().min(1),
   confidence: z.number().min(0).max(1),
-  reason: z.string().min(1).max(200)
+  reason: z.string().min(1)
 });
 
 function buildPrompt(input: CompoundClassificationInput): string {
@@ -176,7 +176,9 @@ function classificationJsonSchema(): Record<string, unknown> {
         maximum: 1
       },
       reason: {
-        type: "string"
+        type: "string",
+        minLength: 1,
+        maxLength: 200
       }
     },
     required: ["decision", "canonical_slug", "alias", "confidence", "reason"]
@@ -231,7 +233,6 @@ async function requestChatCompletionsApi(input: CompoundClassificationInput, sig
     },
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
-      temperature: 0,
       messages: [
         {
           role: "system",
@@ -284,7 +285,7 @@ export async function classifyCompoundAliasWithAi(input: CompoundClassificationI
       canonicalSlug: parsed.canonical_slug,
       alias: parsed.alias.trim().slice(0, 120),
       confidence: parsed.confidence,
-      reason: parsed.reason.trim()
+      reason: parsed.reason.trim().slice(0, 200)
     };
   } catch {
     return null;

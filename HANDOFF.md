@@ -1,15 +1,53 @@
 # Stack Tracker Handoff Note
 
 ## Snapshot
-- Date: 2026-02-15
+- Date: 2026-02-16
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersUnchanged=86`, `unresolvedAliases=90`, `aiTasksQueued=0`, ~`131.6s` runtime).
-- Most recent Finnrick run: `13073ab4-1f9b-498e-8c81-5130b0c35333` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
+- Most recent completed vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=116`, `offersExcludedByRule=0`, `unresolvedAliases=0`, `aiTasksQueued=0`, ~`70.6s` runtime).
+- Most recent Finnrick run: `8a108444-b26a-4f2a-94a9-347cc970a140` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue is fully burned down (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+
+## Wrap-up Update (2026-02-16, final queue closure verification)
+- Applied manual adjudication (`ignored`) to the remaining 7 branded carry-over aliases:
+  - `CLARIFYX 30ml`, `FOLLIGEN 30ml`, `MK-777 10mg`, `NOSTRIDAMUS 10ml`, `SYN 20ml`, `TRINITY 15.25mg`, `TRINITY 2.0 75mg`.
+- Hardened manual ignore persistence:
+  - `markReviewIgnored` now writes admin non-trackable alias memory (`compound_aliases.status='resolved'`, `source='admin'`) so ignored branded noise does not re-open on later runs.
+- Verification rerun:
+  - `npm run job:vendors` -> `scrapeRunId=3178fe72-36db-4335-8fff-1b3fe6ec640a`.
+  - Run summary confirmed `unresolvedAliases=0` and queue remained closed.
+
+## Continuation Update (2026-02-15, fresh ingestion + exclusion audit bootstrap)
+- Quality gates re-run and passing:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+- Fresh ingestion reruns:
+  - `npm run job:vendors` -> `scrapeRunId=30eaffc8-1dd5-4f2a-98ac-6c3a7670d587` (intermediate rerun before final queue closure).
+  - `npm run job:finnrick` -> `scrapeRunId=8a108444-b26a-4f2a-94a9-347cc970a140`.
+- Alias queue delta vs prior fully-closed baseline (`open=0`, `resolved=383`, `ignored=320`):
+  - After vendor rerun: `open=14`.
+  - After bounded triage (`npm run job:review-ai -- --limit=25`): scanned `14`, `resolved=1`, `ignored=1`, `leftOpen=12`.
+  - After classifier parse-path fix + triage reruns: scanned `12` (`ignored=5`, `leftOpen=7`), then scanned `7` (`ignored=0`, `leftOpen=7`).
+  - Net delta from baseline: `open +7`, `resolved +1`, `ignored +6`.
+- Unresolved items grouped by reason (post-bounded triage):
+  - `ai_review_cached` (`7` items):
+    - `CLARIFYX 30ml`, `FOLLIGEN 30ml`, `MK-777 10mg`, `NOSTRIDAMUS 10ml`, `SYN 20ml`, `TRINITY 15.25mg`, `TRINITY 2.0 75mg`
+- AI triage reliability fix applied:
+  - Root cause: model outputs with `reason` length >200 were failing local parsing and collapsing to `ai_unavailable_fallback`.
+  - Fix: classifier now accepts long reasons and truncates to 200 chars for persistence; chat fallback also removed unsupported `temperature=0` for `gpt-5-mini`.
+  - `job:review-ai` now updates payload reason/confidence even when items remain open, so reason-group reporting reflects current AI outcome.
+- Cross-vendor exclusion-rule work started:
+  - Added `npm run job:exclusion-audit` (`scripts/run-single-vendor-exclusion-audit.ts`).
+  - Added `npm run job:exclusion-enforce` (`scripts/run-single-vendor-exclusion-enforcement.ts`) to compile only reviewer-approved exclusions.
+  - Latest report: `reports/exclusion-audit/single-vendor-audit-latest.md` (generated `2026-02-16T01:01:59Z`).
+  - Report totals: `activeOfferCount=115`, `activeCompoundCount=50`, `singleVendorCompoundCount=23`, `singleVendorOfferCount=28`.
+  - Initial manual-review shortlist (`review_for_possible_exclusion`): `bpc-157-kpv`, `glow-2-0`, `illuminate`, `lipo-c-b12`, `thermogenix`.
+  - Runtime enforcement source is `config/manual-offer-exclusions.json` (currently compiled with `0` active rules because no candidates are approved yet).
+  - Enforcement remains blocked behind manual confirmation to avoid excluding valid but poorly named peptides.
 
 ## Final Queue Closure Update (2026-02-15, full burn-down + adjudication)
 - Completed all remaining bounded triage slices and manual adjudication pass; no open alias review items remain.
@@ -436,7 +474,8 @@ Start by reading:
 - /Users/belmead/Documents/stacktracker/CHANGELOG.md
 
 Current state to assume:
-1. Alias triage queue is fully closed: `alias_match` totals are `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+1. Alias triage queue is fully burned down again:
+   - Current totals: `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
 2. Heuristics now cover noisy GLP shorthand and vendor euphemisms:
    - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`
    - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ` / `ER-TZ`
@@ -445,19 +484,33 @@ Current state to assume:
 4. Canonical mapping now treats `LL-37 Complex` as `LL-37`.
 5. Vendor-exclusive branded formulas from Elite plus `Peak Power` (and currently single-vendor `MK-777`) are intentionally ignored for now.
 6. Category importer + seeds now include `Tirzepatide`, `Cagrilintide`, and `LL-37`; latest import result is `seededCompoundCount=51`, `appliedCount=51`, `unresolvedCount=0`.
-7. Latest successful networked runs remain:
-   - vendors: `ddf17efd-d5b7-48e9-abf3-4c601eea872f`
-   - finnrick: `13073ab4-1f9b-498e-8c81-5130b0c35333`
-8. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
+7. Latest successful networked runs:
+   - vendors: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
+   - finnrick: `8a108444-b26a-4f2a-94a9-347cc970a140`
+8. Cross-vendor exclusion framework is in place and manual-gated:
+   - command: `npm run job:exclusion-audit`
+   - latest report: `reports/exclusion-audit/single-vendor-audit-latest.md`
+   - compile approved exclusions with `npm run job:exclusion-enforce`
+   - runtime rules file: `config/manual-offer-exclusions.json`
+   - currently compiled rules: `0`
+9. Coverage is still small:
+   - active vendors: `3`
+   - active vendor pages: `10`
+10. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
-1. Re-run quality gates and a fresh ingestion cycle:
-   - npm run typecheck
-   - npm run lint
-   - npm run test
-   - npm run job:vendors
-   - npm run job:finnrick
-2. Confirm whether new unresolved aliases appear after the fresh vendor run; if they do, triage in bounded slices (`npm run job:review-ai -- --limit=25`) and report unresolved reasons grouped by ambiguity vs missing canonical vs parsing noise.
-3. Prepare the single-vendor exclusion implementation plan (and optional SQL/report script) without blindly dropping valid but poorly named peptides; keep manual review checkpoints.
-4. Update docs with new run IDs, queue deltas, and exclusion-audit findings.
+1. Expand vendor coverage with a first onboarding batch (10 additional vetted storefronts from README’s verified list), adding vendor + page targets in `sql/seed.sql`.
+2. Run robustness cycle:
+   - `npm run typecheck`
+   - `npm run lint`
+   - `npm run test`
+   - `npm run job:vendors`
+   - `npm run job:finnrick`
+   - `npm run job:review-ai -- --limit=50` (repeat bounded slices as needed)
+3. Generate a run-quality report for the expanded scrape:
+   - per-vendor offer counts, discovery source, unresolved alias counts, skipped-by-AI counts, and failures
+   - queue deltas (`open/resolved/ignored`) before and after triage
+   - vendors/pages with zero offers and likely cause
+4. Add/expand regression coverage for any new parsing or alias edge cases found in the expanded run.
+5. Keep single-compound integrity strict: no storefront noise, no non-peptide products, and no vendor-exclusive custom blends persisted as tracked offers.
 ```

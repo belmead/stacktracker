@@ -1100,6 +1100,32 @@ export async function markReviewIgnored(input: {
 }): Promise<void> {
   await sql.begin(async (tx) => {
     const q = tx as unknown as typeof sql;
+    const queueRows = await q<
+      {
+        rawText: string | null;
+      }[]
+    >`
+      select raw_text as "rawText"
+      from review_queue
+      where id = ${input.reviewId}
+      limit 1
+    `;
+
+    const rawAlias = queueRows[0]?.rawText?.trim();
+    const aliasNormalized = rawAlias ? normalizeAlias(rawAlias) : "";
+    if (rawAlias && aliasNormalized) {
+      await q`
+        insert into compound_aliases (compound_id, alias, alias_normalized, source, confidence, status)
+        values (null, ${rawAlias}, ${aliasNormalized}, 'admin', 1.0, 'resolved')
+        on conflict (alias_normalized) do update
+        set compound_id = excluded.compound_id,
+            source = excluded.source,
+            confidence = excluded.confidence,
+            status = excluded.status,
+            updated_at = now()
+      `;
+    }
+
     await q`
       update review_queue
       set status = 'ignored', resolved_at = now(), resolved_by = ${input.actorEmail}

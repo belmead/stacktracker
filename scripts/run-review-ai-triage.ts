@@ -120,6 +120,20 @@ async function run(): Promise<void> {
       outcome = "ignored";
     } else {
       leftOpen += 1;
+
+      await sql`
+        update review_queue
+        set
+          status = 'open',
+          confidence = ${resolution.confidence ?? null},
+          payload = coalesce(payload, '{}'::jsonb) || ${sql.json({
+            reason: resolution.reason,
+            lastOutcome: "left_open_after_ai_triage",
+            lastTriagedAt: new Date().toISOString()
+          })},
+          updated_at = now()
+        where id = ${row.id}
+      `;
     }
 
     if ((index + 1) % PROGRESS_LOG_EVERY === 0 || index + 1 === rows.length) {

@@ -136,18 +136,25 @@ npm run job:vendors
 npm run job:finnrick
 npm run job:review-ai
 npm run job:review-ai -- --limit=25
+npm run job:exclusion-audit
+npm run job:exclusion-enforce
 ```
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 Use `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled slices instead of scanning the full queue.
 If `OPENAI_API_KEY` is missing, AI classification falls back and queue burn-down quality drops sharply.
+`job:exclusion-audit` generates a report-only single-vendor exclusion audit (no automatic enforcement).
+`job:exclusion-enforce` compiles only reviewer-approved exclusions (`manualDecision.status='approved_exclusion'`) into `config/manual-offer-exclusions.json` and can optionally deactivate currently active offers with `--apply-db`.
 
 Runtime observability:
 - `job:vendors` now emits run-level, page-level, and offer-level progress logs.
 - `job:review-ai` now emits queue-size progress with elapsed time, throughput, ETA, and last decision/reason context.
 - Baseline full review-ai run (`2026-02-15`, pre-key fix): `580` items scanned in `420.01s` (`82.86 items/min`, `~0.72s/item`) with `resolved=64`, `ignored=0`, `leftOpen=516`.
-- Queue burn-down is now complete after bounded slices plus manual adjudication:
-  - `alias_match`: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+- Fresh ingestion reruns (`2026-02-15` through `2026-02-16`) were used to validate triage hardening:
+  - Pre-rerun baseline: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+  - After vendor run `0dc6600c-aae3-4a0b-8e00-5f1c4251463c`: `open=14`.
+  - After classifier fix + bounded triage reruns: `open=7`, `resolved=384`, `ignored=326`.
+  - After manual adjudication of the remaining 7 branded aliases and one clean rerun (`3178fe72-36db-4335-8fff-1b3fe6ec640a`): `open=0`, `resolved=384`, `ignored=333`, with `unresolvedAliases=0` in-run.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -230,12 +237,24 @@ npm run test
   - `tests/unit/discovery.test.ts` now validates per-origin discovery cache reuse/unsupported-origin memoization.
   - `tests/unit/worker-alerts.test.ts` validates alias alert batching/truncation formatting.
 - Latest verified networked ingestion runs:
-  - `npm run job:vendors` succeeded with run `ddf17efd-d5b7-48e9-abf3-4c601eea872f` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=90`, `offersUnchanged=86`).
-  - `npm run job:finnrick` succeeded with run `13073ab4-1f9b-498e-8c81-5130b0c35333`.
+  - `npm run job:vendors` succeeded with run `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
+  - `npm run job:finnrick` succeeded with run `8a108444-b26a-4f2a-94a9-347cc970a140`.
 - Latest `job:review-ai` completion (`2026-02-15`):
   - Baseline full run summary (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
-  - Post-key bounded slices plus final manual adjudication closed the queue.
-  - Queue totals now (`alias_match`): `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
+  - Most recent bounded reruns:
+    - `itemsScanned=12`, `resolved=0`, `ignored=5`, `leftOpen=7`, `durationSeconds=54.14`.
+    - `itemsScanned=7`, `resolved=0`, `ignored=0`, `leftOpen=7`, `durationSeconds=2.65` (reason payload refresh after triage update).
+  - Queue totals now (`alias_match`): `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
+- AI triage root-cause fix applied:
+  - OpenAI responses with long `reason` text previously failed local validation and were downgraded to `ai_unavailable_fallback`.
+  - Classifier now accepts long reasons safely and truncates to 200 chars for storage, and chat fallback removed unsupported `temperature=0` for `gpt-5-mini`.
+- Manual adjudication hardening update:
+  - Ignored reviews now also write a resolved non-trackable alias record (`compound_aliases.source='admin'`, `status='resolved'`) so known branded noise does not reopen in later vendor runs.
+- Cross-vendor exclusion audit bootstrap is now available:
+  - `npm run job:exclusion-audit` writes a reviewable report at `reports/exclusion-audit/single-vendor-audit-latest.md`.
+  - Latest report snapshot (`2026-02-16T01:01:59Z`): `activeOfferCount=115`, `activeCompoundCount=50`, `singleVendorCompoundCount=23`, `singleVendorOfferCount=28`.
+  - Enforced exclusion rules are loaded from `config/manual-offer-exclusions.json` at vendor-job runtime and applied by exact product URL.
+  - `npm run job:exclusion-enforce` is the only supported way to populate that file from approved audit entries.
 - Alias triage heuristics are now expanded for noisy vendor naming:
   - Tirzepatide shorthand (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`) resolves to `tirzepatide`.
   - Retatrutide shorthand retains context-aware support (`RT`, `GLP-3`, prefixed forms like `ER-RT`).

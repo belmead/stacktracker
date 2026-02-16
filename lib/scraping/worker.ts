@@ -22,6 +22,7 @@ import {
   upsertCompoundVariant
 } from "@/lib/db/mutations";
 import { env } from "@/lib/env";
+import { loadManualOfferExclusions } from "@/lib/exclusions/manual-offer-exclusions";
 import { computeMetricPrices, resolveVariantTotals } from "@/lib/metrics";
 import { createDiscoveryCache, discoverOffers } from "@/lib/scraping/discovery";
 import { parseProductName } from "@/lib/scraping/normalize";
@@ -44,6 +45,7 @@ interface CounterSummary {
   offersCreated: number;
   offersUpdated: number;
   offersUnchanged: number;
+  offersExcludedByRule: number;
   unresolvedAliases: number;
   aliasesSkippedByAi: number;
   aiTasksQueued: number;
@@ -210,12 +212,24 @@ async function persistExtractedOffers(input: {
   };
   offers: ExtractedOffer[];
   summary: CounterSummary;
+  offerExclusionsByProductUrl: Map<
+    string,
+    {
+      compoundSlug: string;
+      reason: string;
+      decidedBy: string;
+      decidedAt: string;
+      notes: string;
+    }
+  >;
   onProgress?: () => void;
 }): Promise<number> {
   let persisted = 0;
   const unresolvedProductUrls: string[] = [];
+  const excludedProductUrls: string[] = [];
   const unresolvedAliasAlerts: UnresolvedAliasAlertItem[] = [];
   let aliasesSkippedByAi = 0;
+  let offersExcludedByRule = 0;
 
   console.log(
     `[job:vendors] persisting offers for ${input.target.vendorName}: total=${input.offers.length}`
@@ -225,6 +239,32 @@ async function persistExtractedOffers(input: {
 
   for (const [offerIndex, extracted] of input.offers.entries()) {
     input.onProgress?.();
+    const exclusionRule = input.offerExclusionsByProductUrl.get(extracted.productUrl);
+    if (exclusionRule) {
+      offersExcludedByRule += 1;
+      input.summary.offersExcludedByRule += 1;
+      excludedProductUrls.push(extracted.productUrl);
+
+      await recordScrapeEvent({
+        scrapeRunId: input.scrapeRunId,
+        vendorId: input.target.vendorId,
+        severity: "info",
+        code: "OFFER_EXCLUDED_RULE",
+        message: `Skipped offer via manual exclusion rule: ${extracted.productName}`,
+        payload: {
+          productName: extracted.productName,
+          productUrl: extracted.productUrl,
+          compoundSlug: exclusionRule.compoundSlug,
+          reason: exclusionRule.reason,
+          decidedBy: exclusionRule.decidedBy,
+          decidedAt: exclusionRule.decidedAt,
+          notes: exclusionRule.notes
+        }
+      });
+
+      continue;
+    }
+
     const parsed = parseProductName(extracted.productName);
 
     await ensureFormulation(parsed.formulationCode, parsed.formulationLabel);
@@ -347,7 +387,7 @@ async function persistExtractedOffers(input: {
       const processed = offerIndex + 1;
       const unresolved = unresolvedAliasAlerts.length;
       console.log(
-        `[job:vendors] offer progress ${processed}/${input.offers.length} for ${input.target.vendorName} (persisted=${persisted}, unresolved=${unresolved}, skippedByAi=${aliasesSkippedByAi})`
+        `[job:vendors] offer progress ${processed}/${input.offers.length} for ${input.target.vendorName} (persisted=${persisted}, unresolved=${unresolved}, skippedByAi=${aliasesSkippedByAi}, excludedByRule=${offersExcludedByRule})`
       );
       input.onProgress?.();
     }
@@ -363,9 +403,13 @@ async function persistExtractedOffers(input: {
     );
   }
 
+  const deactivationCandidates = Array.from(
+    new Set([...unresolvedProductUrls, ...excludedProductUrls].map((url) => url.trim()).filter(Boolean))
+  );
+
   const deactivatedCount = await markVendorOffersUnavailableByUrls({
     vendorId: input.target.vendorId,
-    productUrls: unresolvedProductUrls
+    productUrls: deactivationCandidates
   });
 
   if (deactivatedCount > 0) {
@@ -374,9 +418,11 @@ async function persistExtractedOffers(input: {
       vendorId: input.target.vendorId,
       severity: "info",
       code: "OFFERS_DEACTIVATED",
-      message: `Marked ${deactivatedCount} existing offer(s) unavailable after unresolved alias detection`,
+      message: `Marked ${deactivatedCount} existing offer(s) unavailable after unresolved alias/manual exclusion handling`,
       payload: {
-        count: deactivatedCount
+        count: deactivatedCount,
+        unresolvedProductCount: unresolvedProductUrls.length,
+        excludedProductCount: excludedProductUrls.length
       }
     });
   }
@@ -403,6 +449,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
     offersCreated: 0,
     offersUpdated: 0,
     offersUnchanged: 0,
+    offersExcludedByRule: 0,
     unresolvedAliases: 0,
     aliasesSkippedByAi: 0,
     aiTasksQueued: 0
@@ -430,6 +477,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
       offersCreated: 0,
       offersUpdated: 0,
       offersUnchanged: 0,
+      offersExcludedByRule: 0,
       unresolvedAliases: 0,
       aliasesSkippedByAi: 0,
       aiTasksQueued: 0
@@ -447,6 +495,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
     summary.offersCreated += delta.offersCreated;
     summary.offersUpdated += delta.offersUpdated;
     summary.offersUnchanged += delta.offersUnchanged;
+    summary.offersExcludedByRule += delta.offersExcludedByRule;
     summary.unresolvedAliases += delta.unresolvedAliases;
     summary.aliasesSkippedByAi += delta.aliasesSkippedByAi;
     summary.aiTasksQueued += delta.aiTasksQueued;
@@ -565,6 +614,12 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
     await pulseHeartbeat(true);
 
     const targets = input.vendorId ? await getVendorScrapeTargets(input.vendorId) : await getActiveScrapeTargets();
+    const manualOfferExclusions = await loadManualOfferExclusions();
+    if (manualOfferExclusions.rulesByProductUrl.size > 0) {
+      console.log(
+        `[job:vendors] loaded ${manualOfferExclusions.rulesByProductUrl.size} manual offer exclusion rule(s) from ${manualOfferExclusions.filePath}`
+      );
+    }
 
     summary.pagesTotal = targets.length;
     markProgress();
@@ -665,6 +720,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
               target,
               offers: aiOffers,
               summary: pageSummary,
+              offerExclusionsByProductUrl: manualOfferExclusions.rulesByProductUrl,
               onProgress: markProgress
             });
 
@@ -813,6 +869,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
           target,
           offers,
           summary: pageSummary,
+          offerExclusionsByProductUrl: manualOfferExclusions.rulesByProductUrl,
           onProgress: markProgress
         });
 
@@ -850,7 +907,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
         const pageDuration = formatDurationMs(Date.now() - pageStartedAt);
 
         console.log(
-          `[job:vendors] [${index + 1}/${targets.length}] ${pageStatus} in ${pageDuration} (created=${pageSummary.offersCreated}, updated=${pageSummary.offersUpdated}, unchanged=${pageSummary.offersUnchanged}, unresolved=${pageSummary.unresolvedAliases}, skippedByAi=${pageSummary.aliasesSkippedByAi}, aiQueued=${pageSummary.aiTasksQueued}, failed=${pageSummary.pagesFailed}, policyBlocked=${pageSummary.policyBlocked})`
+          `[job:vendors] [${index + 1}/${targets.length}] ${pageStatus} in ${pageDuration} (created=${pageSummary.offersCreated}, updated=${pageSummary.offersUpdated}, unchanged=${pageSummary.offersUnchanged}, excludedByRule=${pageSummary.offersExcludedByRule}, unresolved=${pageSummary.unresolvedAliases}, skippedByAi=${pageSummary.aliasesSkippedByAi}, aiQueued=${pageSummary.aiTasksQueued}, failed=${pageSummary.pagesFailed}, policyBlocked=${pageSummary.policyBlocked})`
         );
       }
     };
