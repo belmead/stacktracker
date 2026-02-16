@@ -29,7 +29,7 @@ All notable changes to Stack Tracker are documented in this file.
 - Data model and SQL:
   - Full schema in `sql/schema.sql`.
   - Seed data in `sql/seed.sql` including initial three vendor URLs.
-  - Seed expansion now includes two vetted storefront batches (18 active vendors / 26 active vendor pages total).
+  - Seed expansion now includes three vetted storefront batches (30 active vendors / 38 active vendor pages total).
 - Operations and tooling:
   - `npm run db:bootstrap` to apply schema + seed without direct `psql` usage.
   - Job scripts load `.env.local` via `--env-file-if-exists`.
@@ -111,6 +111,11 @@ All notable changes to Stack Tracker are documented in this file.
   - Cagrilintide (`Cag`, `Cagrilinitide` misspelling context).
 - Tirzepatide shorthand matching now also covers `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and parenthesized `GLP-2 (T)` forms.
 - Added deterministic semaglutide shorthand matching for `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
+- Added deterministic single-letter GLP shorthand matching for dose-coded aliases:
+  - `R ... mg` -> `retatrutide`
+  - `S ... mg` -> `semaglutide`
+  - `T ... mg` -> `tirzepatide`
+- Added regression guards for single-letter GLP shorthand so no-unit/non-`mg` forms (for example `R 30`, `S 10mcg`, `T 60mcg`) do not auto-match.
 - Added deterministic CJC-with-DAC alias normalization guard and HTML-entity stripping so titles like `CJC-1295 &#8211; With DAC (10mg)` resolve safely.
 - Added deterministic CJC no-DAC alias normalization for Mod-GRF phrasing (for example `CJC-1295 no DAC ... (Mod GRF 1-29)`).
 - Added deterministic mapping for cosmetic peptide aliases:
@@ -128,6 +133,19 @@ All notable changes to Stack Tracker are documented in this file.
   - `https://nusciencepeptides.com/`
   - `https://peptides4research.com/`
   - `https://atomiklabz.com/`
+- Vendor seed targets now include a third vetted 12-vendor expansion batch from the same vetted storefront list:
+  - `https://peptiatlas.com/`
+  - `https://purerawz.co/`
+  - `https://peptidecrafters.com/`
+  - `https://biolongevitylabs.com/`
+  - `https://lotilabs.com/`
+  - `https://nexaph.com/`
+  - `https://erospeptides.com/`
+  - `https://www.biopepz.net/`
+  - `https://purepeps.com/`
+  - `https://hkroids.com/`
+  - `https://reta-peptide.com/`
+  - `https://swisschems.is/`
 - Compound seed set now includes additional legitimate compounds discovered during expansion triage (including `semaglutide`, `cagrisema`, `thymalin`, `mazdutide`, `survodutide`, and related canonicals).
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 - Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
@@ -139,6 +157,7 @@ All notable changes to Stack Tracker are documented in this file.
 - Added stale-run reconciliation for scrape jobs: aged `running` runs are marked `failed` after TTL at job start.
 - Added lag-alert events/email when heartbeat inactivity exceeds configured threshold.
 - Vendor scrape worker now uses bounded page concurrency (`VENDOR_SCRAPE_CONCURRENCY`, default `2`, max `3`).
+- Discovery probing remains fallback-ordered per page (`WooCommerce API -> Shopify API -> HTML -> Firecrawl`) as an intentional rate-limit/reliability tradeoff while page workers run in parallel.
 - Added optional runtime controls in env (`VENDOR_SCRAPE_CONCURRENCY`, `SCRAPE_RUN_STALE_TTL_MINUTES`, `SCRAPE_RUN_HEARTBEAT_SECONDS`, `SCRAPE_RUN_LAG_ALERT_SECONDS`).
 - `job:review-ai` now emits queue progress logging for large scans.
   - Progress logs now include elapsed time, processing rate, ETA, and last outcome/reason context.
@@ -165,6 +184,7 @@ All notable changes to Stack Tracker are documented in this file.
   - `npm run lint`
   - `npm run test`
 - Verified networked ingestion execution in full-access mode:
+  - Expanded run (third onboarding pass): `npm run job:vendors` completed with `scrapeRunId=9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
   - Expanded run (second onboarding pass): `npm run job:vendors` completed with `scrapeRunId=37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Expanded run: `npm run job:vendors` completed with `scrapeRunId=d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Expanded run: `npm run job:finnrick` succeeded with `scrapeRunId=5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
@@ -177,6 +197,8 @@ All notable changes to Stack Tracker are documented in this file.
   - Final follow-up triage + taxonomy onboarding closed the queue: `open=0`, `resolved=437`, `ignored=353`.
   - Second expansion-cycle triage closed reopened queue `open=16` -> `open=0` with final totals `resolved=440`, `ignored=366`.
   - Second-pass triage detail: first bounded run left all `16` open (`ai_review_cached`), deterministic normalization fixes resolved `3`, and manual adjudication ignored the final `13` branded/ambiguous aliases.
+  - Third expansion-cycle triage closed reopened queue `open=69` -> `open=0` with final totals `resolved=463`, `ignored=412`.
+  - Third-pass detail: repeated bounded/full `review-ai` scans initially stalled on cached-open aliases; single-letter GLP shorthand hardening resolved `23`, then manual adjudication ignored the final `44` branded/code aliases.
   - `GLP1-S` / `GLP-1 (S)` aliases now resolve to canonical `semaglutide`.
   - `cagrisema` is currently retained as a tracked canonical blend compound.
 - Verified alias triage throughput run:

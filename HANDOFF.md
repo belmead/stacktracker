@@ -5,14 +5,47 @@
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `offersExcludedByRule=0`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`, `aiTasksQueued=1`, ~`815.7s` runtime).
+- Most recent completed vendor run: `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `offersExcludedByRule=0`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`, `aiTasksQueued=4`, ~`2976.2s` runtime).
 - Most recent successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`).
 - Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
-- Current seeded coverage: `18` active vendors / `26` active vendor pages.
+- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
+- Current seeded coverage: `30` active vendors / `38` active vendor pages.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
 - Operational note: hold additional `job:finnrick` runs until vendor scrape expansion work is complete.
+- Runtime model note: vendor pages run with bounded parallel workers, but per-page discovery probes are fallback-ordered and alias AI classification still executes inline when deterministic/cache matching misses.
+
+## Expansion Robustness Update (2026-02-16, third vetted batch)
+- Onboarded 12 additional vetted storefront/API vendors in `sql/seed.sql`:
+  - `peptiatlas.com`, `purerawz.co`, `peptidecrafters.com`, `biolongevitylabs.com`, `lotilabs.com`,
+    `nexaph.com`, `erospeptides.com`, `biopepz.net`, `purepeps.com`, `hkroids.com`,
+    `reta-peptide.com` (Shopify), `swisschems.is`.
+- Coverage moved from `18` vendors / `26` pages to `30` vendors / `38` pages after `npm run db:bootstrap`.
+- Robustness cycle executed:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run job:vendors` -> `9b1960c1-9db9-467e-b477-eba428770954`
+  - bounded/full triage slices (`npm run job:review-ai -- --limit=50` and `--limit=100`)
+  - no `job:finnrick` run (intentionally deferred during expansion)
+- Queue delta for this expansion pass:
+  - Pre-triage baseline: `open=0`, `resolved=440`, `ignored=366`.
+  - After vendor run (pre-triage): `open=69`, `resolved=440`, `ignored=366`.
+  - Final post-triage: `open=0`, `resolved=463`, `ignored=412`.
+  - Net: `resolved +23`, `ignored +46`.
+- Alias robustness hardening applied in code:
+  - deterministic single-letter GLP shorthand mapping now covers `R ... mg`, `S ... mg`, and `T ... mg` forms.
+  - single-letter GLP shorthand now requires `mg` dosage context (for example `R 30` / `S 10mcg` / `T 60mcg` do not auto-match).
+  - regression coverage added in `tests/unit/alias-normalize.test.ts`.
+- Run failures/zero-offer diagnostics:
+  - `NO_OFFERS`: `https://www.biopepz.net/`, `https://eliteresearchusa.com/products`, `https://peptiatlas.com/`, `https://simplepeptide.com/`.
+  - `DISCOVERY_ATTEMPT_FAILED`: `https://simplepeptide.com/` (`woocommerce_store_api` aborted).
+  - `SCRAPE_PAGE_ERROR` (`read ECONNRESET`): `https://purerawz.co/`, `https://reta-peptide.com/`.
+- Manual adjudication (`ignored`) applied to the remaining 44 branded/code aliases after deterministic fixes.
+- Verification run:
+  - `npm run job:review-ai -- --limit=50` -> `itemsScanned=0`, `leftOpen=0`.
+- Detailed robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 
 ## Expansion Robustness Update (2026-02-16, second vetted batch)
 - Onboarded 5 additional vetted storefront/API vendors in `sql/seed.sql`:
@@ -551,11 +584,11 @@ Start by reading:
 
 Current state to assume:
 1. Alias triage queue is fully burned down again:
-   - Current totals: `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
+   - Current totals: `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
 2. Heuristics now cover noisy GLP shorthand and vendor euphemisms:
-   - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`
-   - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ` / `ER-TZ`
-   - semaglutide: `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`
+   - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`, and single-letter `R ... mg`
+   - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ` / `ER-TZ`, and single-letter `T ... mg`
+   - semaglutide: `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`, and single-letter `S ... mg`
    - cagrilintide: `Cag` / `Cagrilinitide` misspelling
 3. Alias descriptor stripping now preserves canonical numeric identities while removing dosage-choice tails:
    - `BPC-157 Peptide 5mg/10mg/20mg` strips to `bpc 157` (not `bpc`).
@@ -567,7 +600,7 @@ Current state to assume:
 7. `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide) for now.
 8. Category importer + seeds include newly onboarded canonical compounds from expansion triage (for example `semaglutide`, `thymalin`, `mazdutide`, `survodutide`, `cagrisema`, `ghr-2`, `ghr-6`, `ara-290`).
 9. Latest networked runs:
-   - vendors (expanded batch, second onboarding pass): `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`)
+   - vendors (expanded batch, third onboarding pass): `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`)
    - latest fully successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
    - finnrick: `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun during scrape-expansion unless explicitly requested)
 10. Cross-vendor exclusion framework is in place and manual-gated:
@@ -576,13 +609,19 @@ Current state to assume:
    - compile approved exclusions with `npm run job:exclusion-enforce`
    - runtime rules file: `config/manual-offer-exclusions.json`
    - currently compiled rules: `0`
-11. Coverage after second expansion batch:
-   - active vendors: `18`
-   - active vendor pages: `26`
+11. Coverage after third expansion batch:
+   - active vendors: `30`
+   - active vendor pages: `38`
 12. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
-1. Expand vendor coverage with the next onboarding batch from README’s vetted storefront list, adding vendor + page targets in `sql/seed.sql`.
+1. Stabilize third-batch scrape reliability by diagnosing and fixing the six known failed/zero-offer targets:
+   - `https://www.biopepz.net/`
+   - `https://eliteresearchusa.com/products`
+   - `https://peptiatlas.com/`
+   - `https://simplepeptide.com/`
+   - `https://purerawz.co/` (`read ECONNRESET`)
+   - `https://reta-peptide.com/` (`read ECONNRESET`)
 2. Run robustness cycle:
    - `npm run typecheck`
    - `npm run lint`

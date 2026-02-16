@@ -22,13 +22,15 @@ Primary docs:
 - Scraping:
   - 24-hour vendor scrape flow with normalization and dedupe/update behavior.
   - Bounded vendor-page parallelism (default concurrency: `2`, configurable up to `3`).
+  - Discovery sources are intentionally probed in fallback order per page (`WooCommerce API -> Shopify API -> HTML -> Firecrawl`) to limit duplicate vendor traffic and rate-limit risk.
   - API-first discovery using WooCommerce Store API / Shopify products API when available.
   - Per-origin API discovery caching to avoid redundant Woo/Shopify probes across repeated vendor page targets.
   - Duplicate API-origin persistence short-circuit (reuse discovery payload once per vendor/source/origin in a run).
   - Standards-first extraction from embedded page data (`schema.org` JSON-LD plus Inertia `data-page` payloads) when present.
   - Alias triage strips storefront/CTA noise and price fragments before deterministic and AI matching.
   - Non-product listings and blend/stack products are auto-skipped for single-compound tracking integrity.
-  - Retatrutide shorthand (for example `RT`, `GLP-3`, `NG-1 RT`) is recognized to reduce avoidable manual review.
+  - GLP shorthand (for example `RT`, `GLP-3`, `NG-1 RT`, and single-letter `R/S/T` dose aliases) is recognized to reduce avoidable manual review.
+  - Single-letter GLP aliases only auto-match when paired with milligram dosage (`R ... mg`, `S ... mg`, `T ... mg`).
   - 24-hour Finnrick sync with `N/A` fallback.
   - Safe-mode robots policy handling.
   - AI-agent fallback task queue for blocked/empty pages.
@@ -158,6 +160,7 @@ Runtime observability:
   - After manual adjudication of the remaining 7 branded aliases and one clean rerun (`3178fe72-36db-4335-8fff-1b3fe6ec640a`): `open=0`, `resolved=384`, `ignored=333`, with `unresolvedAliases=0` in-run.
   - Expansion batch rerun (`d515a861-ad68-4d28-9155-d2439bfe0f4a`) reopened queue to `open=73`; follow-up triage + taxonomy onboarding returned to `open=0`, `resolved=437`, `ignored=353`.
   - Second expansion-batch rerun (`37c41def-d773-4d16-9556-4d45d5902a3f`) reopened queue to `open=16`; deterministic normalization fixes + manual adjudication returned to `open=0`, `resolved=440`, `ignored=366`.
+  - Third expansion-batch rerun (`9b1960c1-9db9-467e-b477-eba428770954`) reopened queue to `open=69`; single-letter GLP shorthand hardening (`R/S/T`) + manual adjudication returned to `open=0`, `resolved=463`, `ignored=412`.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -222,6 +225,18 @@ Seeded in `sql/seed.sql`:
 - `https://nusciencepeptides.com/`
 - `https://peptides4research.com/`
 - `https://atomiklabz.com/`
+- `https://peptiatlas.com/`
+- `https://purerawz.co/`
+- `https://peptidecrafters.com/`
+- `https://biolongevitylabs.com/`
+- `https://lotilabs.com/`
+- `https://nexaph.com/`
+- `https://erospeptides.com/`
+- `https://www.biopepz.net/`
+- `https://purepeps.com/`
+- `https://hkroids.com/`
+- `https://reta-peptide.com/`
+- `https://swisschems.is/`
 
 ## Testing
 
@@ -262,16 +277,18 @@ npm run test
   - `tests/unit/discovery.test.ts` now validates per-origin discovery cache reuse/unsupported-origin memoization.
   - `tests/unit/worker-alerts.test.ts` validates alias alert batching/truncation formatting.
 - Latest verified networked ingestion runs:
+  - Expanded coverage run (third onboarding pass): `npm run job:vendors` -> `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
   - Expanded coverage run (second onboarding pass): `npm run job:vendors` -> `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Prior expanded coverage run (first onboarding pass): `npm run job:vendors` -> `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Latest fully successful vendor run remains `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
   - Latest `npm run job:finnrick` run remains `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`) and was intentionally deferred during the current scrape-expansion pass.
-  - Current seeded coverage after expansion: `18` active vendors / `26` active vendor pages (`18` vendors with active offers).
+  - Current seeded coverage after expansion: `30` active vendors / `38` active vendor pages (`28` vendors with active offers).
 - Latest `job:review-ai` outcomes:
   - Historical baseline full run (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
   - First expansion-cycle triage + taxonomy onboarding (`2026-02-16`) reduced reopened queue from `open=73` to `open=0` (net `resolved +53`, `ignored +20`).
   - Second expansion-cycle triage (`2026-02-16`) reduced reopened queue from `open=16` to `open=0` (net `resolved +3`, `ignored +13`).
-  - Current queue totals (`alias_match`): `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
+  - Third expansion-cycle triage (`2026-02-16`) reduced reopened queue from `open=69` to `open=0` (net `resolved +23`, `ignored +46`).
+  - Current queue totals (`alias_match`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
   - One bounded triage attempt encountered DB timeout (`canceling statement due to statement timeout`); subsequent bounded/full reruns completed successfully.
   - `GLP1-S`/`GLP-1 (S)`/`GLP1` are now deterministically mapped to canonical `semaglutide`.
   - `cagrisema` is kept as a tracked canonical blend compound (cagrilintide + semaglutide).
@@ -290,7 +307,8 @@ npm run test
 - Alias triage heuristics are now expanded for noisy vendor naming:
   - Tirzepatide shorthand (`TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ`/`ER-TZ`) resolves to `tirzepatide`.
   - Semaglutide shorthand (`semaglutide`, `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`) resolves to `semaglutide`.
-  - Retatrutide shorthand retains context-aware support (`RT`, `GLP-3`, prefixed forms like `ER-RT`).
+  - Retatrutide shorthand retains context-aware support (`RT`, `GLP-3`, prefixed forms like `ER-RT`) and single-letter dose aliases (`R ... mg`); semaglutide/tirzepatide now also support single-letter `S ... mg` / `T ... mg` aliases.
+  - Single-letter GLP matching is milligram-only by design (`mg` required; `no-unit` / `mcg` forms do not auto-match).
   - `Cag`/`Cagrilinitide` resolves to `cagrilintide`.
   - `LL-37 Complex` maps to canonical `LL-37`.
   - CJC no-DAC Mod-GRF phrasing now maps to canonical CJC no-DAC (`cjc-1295-no-dac-with-ipa`).

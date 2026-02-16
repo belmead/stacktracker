@@ -58,6 +58,7 @@ const PRICE_PATTERN = /\$\s*\d+(?:,\d{3})*(?:\.\d{1,2})?/g;
 const RETATRUTIDE_SHORTHAND_PATTERNS = [/\bretatrutide\b/i, /\breta\b/i, /\bglp[\s-]?3\b/i, /\bng[\s-]?1[\s-]?rt\b/i];
 const RETATRUTIDE_RT_CONTEXT_PATTERN = /\brt\b/i;
 const RETATRUTIDE_RT_CONTEXT_HINT_PATTERN = /\b(ng|glp|finished|reta|pharma|er|elite)\b/i;
+const RETATRUTIDE_SINGLE_LETTER_PATTERN = /^\s*r\s+\d+(?:\.\d+)?\s*mg(?:\s*\(\s*\d+\s*vials?\s*\))?\s*$/i;
 const TIRZEPATIDE_SHORTHAND_PATTERNS = [
   /\btirzepatide\b/i,
   /\btirz\b/i,
@@ -67,9 +68,11 @@ const TIRZEPATIDE_SHORTHAND_PATTERNS = [
 ];
 const TIRZEPATIDE_TZ_PATTERN = /\btz\b/i;
 const TIRZEPATIDE_TZ_CONTEXT_PATTERN = /\b(glp|tirz|ng|er|elite)\b/i;
+const TIRZEPATIDE_SINGLE_LETTER_PATTERN = /^\s*t\s+\d+(?:\.\d+)?\s*mg(?:\s*\(\s*\d+\s*vials?\s*\))?\s*$/i;
 const SEMAGLUTIDE_SHORTHAND_PATTERNS = [/\bsemaglutide\b/i, /\bsema\b/i, /\bglp[\s-]?1\s*(?:[- ]?s|\(\s*s\s*\))\b/i];
 const SEMAGLUTIDE_BARE_GLP1_PATTERN = /\bglp[\s-]?1\b/i;
 const SEMAGLUTIDE_EXCLUSION_PATTERN = /\b(tz|tirz|reta|retatrutide|rt|cag)\b/i;
+const SEMAGLUTIDE_SINGLE_LETTER_PATTERN = /^\s*s\s+\d+(?:\.\d+)?\s*mg(?:\s*\(\s*\d+\s*vials?\s*\))?\s*$/i;
 const NON_TRACKABLE_SUPPLEMENT_PATTERNS = [
   /\bpre[\s-]?workout\b/i,
   /\bdissolv(?:able|ing)\s+strips?\b/i,
@@ -193,6 +196,10 @@ export function isLikelyRetatrutideShorthand(input: string): boolean {
     return true;
   }
 
+  if (RETATRUTIDE_SINGLE_LETTER_PATTERN.test(cleaned)) {
+    return true;
+  }
+
   return RETATRUTIDE_RT_CONTEXT_PATTERN.test(cleaned) && RETATRUTIDE_RT_CONTEXT_HINT_PATTERN.test(cleaned);
 }
 
@@ -210,6 +217,10 @@ export function isLikelyTirzepatideShorthand(input: string): boolean {
     return true;
   }
 
+  if (TIRZEPATIDE_SINGLE_LETTER_PATTERN.test(cleaned)) {
+    return true;
+  }
+
   return TIRZEPATIDE_TZ_PATTERN.test(cleaned) && TIRZEPATIDE_TZ_CONTEXT_PATTERN.test(cleaned);
 }
 
@@ -224,6 +235,10 @@ export function isLikelySemaglutideShorthand(input: string): boolean {
   }
 
   if (SEMAGLUTIDE_SHORTHAND_PATTERNS.some((pattern) => pattern.test(cleaned))) {
+    return true;
+  }
+
+  if (SEMAGLUTIDE_SINGLE_LETTER_PATTERN.test(cleaned)) {
     return true;
   }
 

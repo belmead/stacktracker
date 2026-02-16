@@ -30,7 +30,19 @@ values
   ('Pura Peptides', 'pura-peptides', 'https://purapeptides.com/'),
   ('NuScience Peptides', 'nuscience-peptides', 'https://nusciencepeptides.com/'),
   ('Peptides 4 Research', 'peptides-4-research', 'https://peptides4research.com/'),
-  ('Atomik Labz', 'atomik-labz', 'https://atomiklabz.com/')
+  ('Atomik Labz', 'atomik-labz', 'https://atomiklabz.com/'),
+  ('PeptiAtlas', 'pepti-atlas', 'https://peptiatlas.com/'),
+  ('PureRawz', 'pure-rawz', 'https://purerawz.co/'),
+  ('Peptide Crafters', 'peptide-crafters', 'https://peptidecrafters.com/'),
+  ('BioLongevity Labs', 'biolongevity-labs', 'https://biolongevitylabs.com/'),
+  ('Loti Labs', 'loti-labs', 'https://lotilabs.com/'),
+  ('Nexaph', 'nexaph', 'https://nexaph.com/'),
+  ('Eros Peptides', 'eros-peptides', 'https://erospeptides.com/'),
+  ('BioPepz', 'biopepz', 'https://www.biopepz.net/'),
+  ('PurePeps', 'purepeps', 'https://purepeps.com/'),
+  ('HK Roids', 'hk-roids', 'https://hkroids.com/'),
+  ('Reta Peptide', 'reta-peptide', 'https://reta-peptide.com/'),
+  ('Swiss Chems', 'swiss-chems', 'https://swisschems.is/')
 on conflict (slug) do update
 set
   name = excluded.name,
@@ -65,7 +77,19 @@ with desired_vendor_pages as (
       ('pura-peptides', 'https://purapeptides.com/', 'catalog'),
       ('nuscience-peptides', 'https://nusciencepeptides.com/', 'catalog'),
       ('peptides-4-research', 'https://peptides4research.com/', 'catalog'),
-      ('atomik-labz', 'https://atomiklabz.com/', 'catalog')
+      ('atomik-labz', 'https://atomiklabz.com/', 'catalog'),
+      ('pepti-atlas', 'https://peptiatlas.com/', 'catalog'),
+      ('pure-rawz', 'https://purerawz.co/', 'catalog'),
+      ('peptide-crafters', 'https://peptidecrafters.com/', 'catalog'),
+      ('biolongevity-labs', 'https://biolongevitylabs.com/', 'catalog'),
+      ('loti-labs', 'https://lotilabs.com/', 'catalog'),
+      ('nexaph', 'https://nexaph.com/', 'catalog'),
+      ('eros-peptides', 'https://erospeptides.com/', 'catalog'),
+      ('biopepz', 'https://www.biopepz.net/', 'catalog'),
+      ('purepeps', 'https://purepeps.com/', 'catalog'),
+      ('hk-roids', 'https://hkroids.com/', 'catalog'),
+      ('reta-peptide', 'https://reta-peptide.com/', 'catalog'),
+      ('swiss-chems', 'https://swisschems.is/', 'catalog')
   ) as t(vendor_slug, url, page_type)
 )
 insert into vendor_pages (vendor_id, url, page_type)

@@ -93,6 +93,9 @@ describe("alias normalization", () => {
     expect(isLikelyRetatrutideShorthand("US Finished NG-1 RT")).toBe(true);
     expect(isLikelyRetatrutideShorthand("GLP-3 20mg")).toBe(true);
     expect(isLikelyRetatrutideShorthand("ER-RT (10mg)")).toBe(true);
+    expect(isLikelyRetatrutideShorthand("R 30MG (10 Vials)")).toBe(true);
+    expect(isLikelyRetatrutideShorthand("R 30")).toBe(false);
+    expect(isLikelyRetatrutideShorthand("R 30mcg")).toBe(false);
   });
 
   it("detects cagrilintide shorthand aliases", () => {
@@ -109,6 +112,9 @@ describe("alias normalization", () => {
     expect(isLikelyTirzepatideShorthand("GLP-2TZ 100MG")).toBe(true);
     expect(isLikelyTirzepatideShorthand("GLP1-T 60mg")).toBe(true);
     expect(isLikelyTirzepatideShorthand("GLP-2 (T) (10mg)")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("T 60MG")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("T 60")).toBe(false);
+    expect(isLikelyTirzepatideShorthand("T 60mcg")).toBe(false);
   });
 
   it("detects semaglutide shorthand aliases", () => {
@@ -116,6 +122,9 @@ describe("alias normalization", () => {
     expect(isLikelySemaglutideShorthand("GLP1-S")).toBe(true);
     expect(isLikelySemaglutideShorthand("GLP-1 (S) (10mg)")).toBe(true);
     expect(isLikelySemaglutideShorthand("GLP1")).toBe(true);
+    expect(isLikelySemaglutideShorthand("S 10MG")).toBe(true);
+    expect(isLikelySemaglutideShorthand("S 10")).toBe(false);
+    expect(isLikelySemaglutideShorthand("S 10mcg")).toBe(false);
     expect(isLikelySemaglutideShorthand("GLP-1 TZ 10mg")).toBe(false);
   });
 

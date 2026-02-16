@@ -76,6 +76,7 @@ MVP goals:
 ### Vendor scraping
 - Schedule: every 24 hours.
 - Bounded page concurrency: 2 workers by default (configurable up to 3).
+- Per-page discovery probes run in fallback order (`WooCommerce API -> Shopify API -> HTML -> Firecrawl`) to avoid duplicate upstream load/rate-limit pressure.
 - Inputs captured:
   - Last scrape timestamp
   - Last run heartbeat timestamp (for lag/stale-run detection)
@@ -200,8 +201,8 @@ Internal jobs:
 - Alias resolution now strips storefront noise before deterministic and AI matching.
 - Non-product/noise listings and blend/stack aliases are auto-ignored for single-compound integrity (no offer persistence).
 - Non-trackable supplement aliases (for example `pre-workout`) are deterministically ignored to prevent manual-review queue churn.
-- Retatrutide shorthand aliases now have deterministic fallback matching to reduce avoidable review queue load.
-- Tirzepatide shorthand aliases now have deterministic fallback matching (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`).
+- Retatrutide shorthand aliases now have deterministic fallback matching to reduce avoidable review queue load (including single-letter `R ... mg` forms).
+- Tirzepatide shorthand aliases now have deterministic fallback matching (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`, plus single-letter `T ... mg` forms).
 - Cagrilintide shorthand aliases now have deterministic fallback matching (`Cag`, `Cagrilinitide` misspelling).
 - CJC with DAC aliases are now normalized safely even when titles contain HTML entities (for example `&#8211;`).
 - LL-37 canonical mapping now covers vendor phrasing like `LL-37 Complex`.
@@ -213,18 +214,23 @@ Internal jobs:
 - Coverage expansion batches are onboarded in seed data:
   - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
   - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).
+  - Batch 3 added 12 vetted storefront/API vendors (`18/26` -> `30/38` vendors/pages).
 - Expanded ingestion robustness cycles (`2026-02-16`) ran with:
   - Batch 1 vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Batch 2 vendor run `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
+  - Batch 3 vendor run `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
   - Latest Finnrick run remains `5233e9be-24fb-42ba-9084-2e8dde507589` and is intentionally deferred during active scrape-expansion passes.
 - Alias queue delta across expansion cycles:
   - Batch 1: `open=73` -> `open=0` (net `resolved +53`, `ignored +20`).
   - Batch 2: `open=16` -> `open=0` (net `resolved +3`, `ignored +13`).
-  - Current totals: `open=0`, `in_progress=0`, `resolved=440`, `ignored=366`.
+  - Batch 3: `open=69` -> `open=0` (net `resolved +23`, `ignored +46`).
+  - Current totals: `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
 - Additional robustness hardening from expansion findings:
   - Cached `needs_review` aliases now allow deterministic heuristics before returning `ai_review_cached`.
   - Deterministic tirzepatide shorthand coverage now includes `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and `GLP-2 (T)` forms.
   - Deterministic semaglutide shorthand coverage now includes `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
+  - Deterministic GLP shorthand coverage now includes single-letter dose aliases `R ... mg` / `S ... mg` / `T ... mg`.
+  - Single-letter GLP shorthand matching now explicitly requires `mg` dosage context (no-unit and non-`mg` unit forms do not auto-match).
   - Deterministic CJC no-DAC mapping now supports Mod-GRF phrasing.
   - Deterministic canonical mapping now covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
   - Alias descriptor stripping now drops generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`).
