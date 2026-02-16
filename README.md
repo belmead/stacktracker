@@ -143,6 +143,7 @@ npm run job:exclusion-enforce
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 Use `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled slices instead of scanning the full queue.
 If `OPENAI_API_KEY` is missing, AI classification falls back and queue burn-down quality drops sharply.
+During active scrape-expansion phases, defer additional `job:finnrick` runs to reduce unnecessary load; run Finnrick after scrape expansion stabilizes.
 `job:exclusion-audit` generates a report-only single-vendor exclusion audit (no automatic enforcement).
 `job:exclusion-enforce` compiles only reviewer-approved exclusions (`manualDecision.status='approved_exclusion'`) into `config/manual-offer-exclusions.json` and can optionally deactivate currently active offers with `--apply-db`.
 
@@ -155,6 +156,7 @@ Runtime observability:
   - After vendor run `0dc6600c-aae3-4a0b-8e00-5f1c4251463c`: `open=14`.
   - After classifier fix + bounded triage reruns: `open=7`, `resolved=384`, `ignored=326`.
   - After manual adjudication of the remaining 7 branded aliases and one clean rerun (`3178fe72-36db-4335-8fff-1b3fe6ec640a`): `open=0`, `resolved=384`, `ignored=333`, with `unresolvedAliases=0` in-run.
+  - Expansion batch rerun (`d515a861-ad68-4d28-9155-d2439bfe0f4a`) reopened queue to `open=73`; follow-up triage + taxonomy onboarding returned to `open=0`, `resolved=437`, `ignored=353`.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -196,7 +198,24 @@ Seeded in `sql/seed.sql`:
 - `http://eliteresearchusa.com/`
 - `https://eliteresearchusa.com/products`
 - `https://peptidelabsx.com/`
+- `https://peptidelabsx.com/product-category/products-all/`
+- `https://peptidelabsx.com/shop/`
 - `https://nexgenpeptides.shop/`
+- `https://nexgenpeptides.shop/shop/`
+- `https://nexgenpeptides.shop/product-category/us-finished/`
+- `https://nexgenpeptides.shop/product-category/foundation/`
+- `https://nexgenpeptides.shop/product-category/longevity/`
+- `https://nexgenpeptides.shop/product-category/strength/`
+- `https://peptidology.co/`
+- `https://eternalpeptides.com/`
+- `https://www.puretestedpeptides.com/`
+- `https://verifiedpeptides.com/`
+- `https://planetpeptide.com/`
+- `https://simplepeptide.com/`
+- `https://bulkpeptidesupply.com/`
+- `https://coastalpeptides.com/`
+- `https://myoasislabs.com/`
+- `https://peptilabresearch.com/`
 
 ## Testing
 
@@ -237,14 +256,18 @@ npm run test
   - `tests/unit/discovery.test.ts` now validates per-origin discovery cache reuse/unsupported-origin memoization.
   - `tests/unit/worker-alerts.test.ts` validates alias alert batching/truncation formatting.
 - Latest verified networked ingestion runs:
-  - `npm run job:vendors` succeeded with run `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
-  - `npm run job:finnrick` succeeded with run `8a108444-b26a-4f2a-94a9-347cc970a140`.
-- Latest `job:review-ai` completion (`2026-02-15`):
-  - Baseline full run summary (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
-  - Most recent bounded reruns:
-    - `itemsScanned=12`, `resolved=0`, `ignored=5`, `leftOpen=7`, `durationSeconds=54.14`.
-    - `itemsScanned=7`, `resolved=0`, `ignored=0`, `leftOpen=7`, `durationSeconds=2.65` (reason payload refresh after triage update).
-  - Queue totals now (`alias_match`): `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
+  - Expanded coverage run: `npm run job:vendors` -> `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
+  - Latest fully successful vendor run remains `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
+  - `npm run job:finnrick` succeeded with run `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
+- Latest `job:review-ai` outcomes:
+  - Historical baseline full run (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
+  - Expansion-cycle triage + taxonomy onboarding (`2026-02-16`) reduced reopened queue from `open=73` to `open=0` (net `resolved +53`, `ignored +20`).
+  - Current queue totals (`alias_match`): `open=0`, `in_progress=0`, `resolved=437`, `ignored=353`.
+  - One bounded triage attempt encountered DB timeout (`canceling statement due to statement timeout`); subsequent bounded/full reruns completed successfully.
+  - `GLP1-S`/`GLP-1 (S)`/`GLP1` are now deterministically mapped to canonical `semaglutide`.
+  - `cagrisema` is kept as a tracked canonical blend compound (cagrilintide + semaglutide).
+- Expanded-run robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 - AI triage root-cause fix applied:
   - OpenAI responses with long `reason` text previously failed local validation and were downgraded to `ai_unavailable_fallback`.
   - Classifier now accepts long reasons safely and truncates to 200 chars for storage, and chat fallback removed unsupported `temperature=0` for `gpt-5-mini`.
@@ -256,14 +279,19 @@ npm run test
   - Enforced exclusion rules are loaded from `config/manual-offer-exclusions.json` at vendor-job runtime and applied by exact product URL.
   - `npm run job:exclusion-enforce` is the only supported way to populate that file from approved audit entries.
 - Alias triage heuristics are now expanded for noisy vendor naming:
-  - Tirzepatide shorthand (`TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ`/`ER-TZ`) resolves to `tirzepatide`.
+  - Tirzepatide shorthand (`TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ`/`ER-TZ`) resolves to `tirzepatide`.
+  - Semaglutide shorthand (`semaglutide`, `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`) resolves to `semaglutide`.
   - Retatrutide shorthand retains context-aware support (`RT`, `GLP-3`, prefixed forms like `ER-RT`).
   - `Cag`/`Cagrilinitide` resolves to `cagrilintide`.
   - `LL-37 Complex` maps to canonical `LL-37`.
+  - CJC no-DAC Mod-GRF phrasing now maps to canonical CJC no-DAC (`cjc-1295-no-dac-with-ipa`).
+  - Deterministic canonical mapping now covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
   - HTML entities (for example `&#8211;`) are stripped before alias matching, fixing CJC with DAC normalization.
 - Alias policy now avoids database clutter from non-peptide noise:
   - Non-trackable storefront noise and merch are ignored (not persisted as offers/variants).
   - `pre-workout` supplement aliases are now deterministically treated as non-trackable to avoid unresolved carry-over.
+  - Generic `peptide` suffix and pack-count descriptor tails (for example `10 vials`) are stripped during alias normalization.
+  - Cosmetic/non-product patterns (for example dissolving strips, body cream, hair-growth formulations, conditioner, eye-glow, t-shirt) are now treated as non-trackable in deterministic alias checks.
   - Aged ignored/resolved review rows and non-trackable alias memory are pruned automatically by retention settings.
 - Job reliability hardening is in place:
   - Stale `running` scrape runs are auto-reconciled to `failed` after TTL.

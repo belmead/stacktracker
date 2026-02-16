@@ -5,11 +5,47 @@
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
 - App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=116`, `offersExcludedByRule=0`, `unresolvedAliases=0`, `aiTasksQueued=0`, ~`70.6s` runtime).
-- Most recent Finnrick run: `8a108444-b26a-4f2a-94a9-347cc970a140` (`vendorsTotal=3`, `vendorsMatched=1`, `ratingsUpdated=1`, `notFound=2`).
+- Most recent completed vendor run: `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUpdated=0`, `offersUnchanged=116`, `offersExcludedByRule=0`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`, `aiTasksQueued=1`, ~`1548.4s` runtime).
+- Most recent successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`).
+- Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
+- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=437`, `ignored=353`.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
+- Operational note: hold additional `job:finnrick` runs until vendor scrape expansion work is complete.
+
+## Expansion Robustness Update (2026-02-16, first 10-vendor batch)
+- Onboarded 10 additional vetted storefront/API vendors in `sql/seed.sql`:
+  - `peptidology.co`, `eternalpeptides.com`, `puretestedpeptides.com`, `verifiedpeptides.com`, `planetpeptide.com`, `simplepeptide.com`, `bulkpeptidesupply.com`, `coastalpeptides.com`, `myoasislabs.com`, `peptilabresearch.com`.
+- Coverage moved from 3 vendors / 10 pages to 13 vendors / 21 pages after `npm run db:bootstrap`.
+- Robustness cycle executed:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run job:vendors` -> `d515a861-ad68-4d28-9155-d2439bfe0f4a`
+  - `npm run job:finnrick` -> `5233e9be-24fb-42ba-9084-2e8dde507589`
+  - bounded/full triage slices (`npm run job:review-ai` with `--limit=50` and `--limit=25` plus full scans)
+- Queue delta for this expansion pass:
+  - Pre-triage (`after vendors run`): `open=73`, `resolved=384`, `ignored=333`.
+  - Final post-triage: `open=0`, `resolved=437`, `ignored=353`.
+  - Net: `open -73`, `resolved +53`, `ignored +20`.
+- One `job:review-ai -- --limit=50` attempt failed with `canceling statement due to statement timeout`; subsequent bounded/full reruns completed.
+- Alias robustness hardening applied in code:
+  - cached `needs_review` aliases now re-check deterministic heuristics before returning `ai_review_cached`;
+  - deterministic shorthand expansion for tirzepatide variants (`GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)` forms);
+  - semaglutide shorthand mapping for `GLP1-S`, `GLP-1 (S)`, and `GLP1`;
+  - deterministic CJC no-DAC mapping for Mod-GRF phrasing;
+  - expanded non-product detection for cosmetic/strip noise;
+  - deterministic blend/stack skip path now restricted to explicit blend markers;
+  - deterministic canonical matching added for `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels;
+  - descriptor stripping now removes generic `peptide` suffix tokens and pack-count descriptor tails like `10 vials`.
+- Manual correction applied for one false-ignore edge case:
+  - `Buy GHK-Cu Copper Peptide 50mg/100mg...` was corrected to `resolved` against canonical `ghk-cu`.
+- Legitimate blend policy update:
+  - `cagrisema` is kept as a tracked canonical blend compound (cagrilintide + semaglutide) for now.
+- Detailed robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
+- Expansion pass result:
+  - Alias queue is fully burned down again (`open=0`).
 
 ## Wrap-up Update (2026-02-16, final queue closure verification)
 - Applied manual adjudication (`ignored`) to the remaining 7 branded carry-over aliases:
@@ -475,37 +511,38 @@ Start by reading:
 
 Current state to assume:
 1. Alias triage queue is fully burned down again:
-   - Current totals: `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
+   - Current totals: `open=0`, `in_progress=0`, `resolved=437`, `ignored=353`.
 2. Heuristics now cover noisy GLP shorthand and vendor euphemisms:
    - retatrutide: `RT`, `GLP-3`, prefixed forms like `ER-RT`
-   - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, prefixed forms like `NG-TZ` / `ER-TZ`
+   - tirzepatide: `TZ`, `tirz`, `GLP-1 TZ`, `GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`, prefixed forms like `NG-TZ` / `ER-TZ`
+   - semaglutide: `sema`, `GLP1-S`, `GLP-1 (S)`, `GLP1`
    - cagrilintide: `Cag` / `Cagrilinitide` misspelling
 3. HTML entities are stripped during normalization, which fixed `CJC-1295 &#8211; With DAC (10mg)` matching.
-4. Canonical mapping now treats `LL-37 Complex` as `LL-37`.
-5. Vendor-exclusive branded formulas from Elite plus `Peak Power` (and currently single-vendor `MK-777`) are intentionally ignored for now.
-6. Category importer + seeds now include `Tirzepatide`, `Cagrilintide`, and `LL-37`; latest import result is `seededCompoundCount=51`, `appliedCount=51`, `unresolvedCount=0`.
-7. Latest successful networked runs:
-   - vendors: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
-   - finnrick: `8a108444-b26a-4f2a-94a9-347cc970a140`
+4. Canonical mapping now treats `LL-37 Complex` as `LL-37`; deterministic mapping also covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
+5. `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide) for now.
+6. Category importer + seeds include newly onboarded canonical compounds from expansion triage (for example `semaglutide`, `thymalin`, `mazdutide`, `survodutide`, `cagrisema`, `ghr-2`, `ghr-6`, `ara-290`).
+7. Latest networked runs:
+   - vendors (expanded batch): `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`)
+   - latest fully successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
+   - finnrick: `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun during scrape-expansion unless explicitly requested)
 8. Cross-vendor exclusion framework is in place and manual-gated:
    - command: `npm run job:exclusion-audit`
    - latest report: `reports/exclusion-audit/single-vendor-audit-latest.md`
    - compile approved exclusions with `npm run job:exclusion-enforce`
    - runtime rules file: `config/manual-offer-exclusions.json`
    - currently compiled rules: `0`
-9. Coverage is still small:
-   - active vendors: `3`
-   - active vendor pages: `10`
+9. Coverage after first expansion batch:
+   - active vendors: `13`
+   - active vendor pages: `21`
 10. Full-access mode is required in Codex sessions for reliable DNS/networked job execution; restricted sandbox mode can produce false `ENOTFOUND` failures.
 
 Pick up by:
-1. Expand vendor coverage with a first onboarding batch (10 additional vetted storefronts from README’s verified list), adding vendor + page targets in `sql/seed.sql`.
+1. Expand vendor coverage with the next onboarding batch from README’s vetted storefront list, adding vendor + page targets in `sql/seed.sql`.
 2. Run robustness cycle:
    - `npm run typecheck`
    - `npm run lint`
    - `npm run test`
    - `npm run job:vendors`
-   - `npm run job:finnrick`
    - `npm run job:review-ai -- --limit=50` (repeat bounded slices as needed)
 3. Generate a run-quality report for the expanded scrape:
    - per-vendor offer counts, discovery source, unresolved alias counts, skipped-by-AI counts, and failures

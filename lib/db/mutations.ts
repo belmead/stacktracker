@@ -3,11 +3,15 @@ import type { JSONValue } from "postgres";
 import type { CompoundResolution, ExtractedOffer, MetricPriceMap, ResolutionStatus } from "@/lib/types";
 import { classifyCompoundAliasWithAi } from "@/lib/ai/compound-classifier";
 import {
+  isLikelyArgirelineAlias,
   isLikelyCagrilintideShorthand,
   isLikelyBlendOrStackProduct,
+  isLikelyCjcNoDacAlias,
   isLikelyCjcWithDacAlias,
   isLikelyNonProductListing,
+  isLikelyPalTetrapeptide7Alias,
   isLikelyRetatrutideShorthand,
+  isLikelySemaglutideShorthand,
   isLikelyTirzepatideShorthand,
   normalizeAlias,
   stripAliasDescriptors,
@@ -77,10 +81,18 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
   const productUrl = typeof input === "string" ? "" : input.productUrl ?? "";
   const vendorName = typeof input === "string" ? "" : input.vendorName ?? "";
   const likelyBlendOrStack = isLikelyBlendOrStackProduct(rawName) || isLikelyBlendOrStackProduct(productName);
+  const hasExplicitBlendMarker =
+    /\b(blend|stack|combo|mix)\b/i.test(rawName) ||
+    /\b(blend|stack|combo|mix)\b/i.test(productName) ||
+    /\s\+\s/.test(rawName) ||
+    /\s\+\s/.test(productName) ||
+    /\s\/\s/.test(rawName) ||
+    /\s\/\s/.test(productName);
 
   const aliasNormalized = normalizeAlias(rawName);
   const strippedAlias = stripAliasDescriptors(aliasNormalized);
   const aliasCandidates = strippedAlias && strippedAlias !== aliasNormalized ? [aliasNormalized, strippedAlias] : [aliasNormalized];
+  let cachedNeedsReviewConfidence: number | null = null;
 
   if (!aliasNormalized) {
     return {
@@ -178,14 +190,29 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     }
 
     if (alias.status === "needs_review" && alias.source === "import") {
-      return {
-        compoundId: null,
-        confidence: alias.confidence,
-        status: "needs_review",
-        aliasNormalized,
-        reason: "ai_review_cached"
-      };
+      cachedNeedsReviewConfidence = alias.confidence;
+      continue;
     }
+  }
+
+  if (likelyBlendOrStack && hasExplicitBlendMarker) {
+    await upsertAlias({
+      compoundId: null,
+      alias: rawName || rawNameOriginal,
+      aliasNormalized,
+      source: "scraped",
+      confidence: 0.9,
+      status: "resolved"
+    });
+
+    return {
+      compoundId: null,
+      confidence: 0.9,
+      status: "resolved",
+      aliasNormalized,
+      reason: "heuristic_blend_or_stack",
+      skipReview: true
+    };
   }
 
   if (isLikelyRetatrutideShorthand(rawName) || isLikelyRetatrutideShorthand(productName)) {
@@ -253,6 +280,45 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
         status: "auto_matched",
         aliasNormalized,
         reason: "tirzepatide_shorthand_rule"
+      };
+    }
+  }
+
+  if (isLikelySemaglutideShorthand(rawName) || isLikelySemaglutideShorthand(productName)) {
+    const semaglutideRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('semaglutide', 'glp1-s')
+        and is_active = true
+      order by case
+        when slug = 'semaglutide' then 0
+        when slug = 'glp1-s' then 1
+        else 2
+      end asc
+      limit 1
+    `;
+
+    const semaglutideId = semaglutideRows[0]?.id;
+    if (semaglutideId) {
+      await upsertAlias({
+        compoundId: semaglutideId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.9,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: semaglutideId,
+        confidence: 0.9,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "semaglutide_shorthand_rule"
       };
     }
   }
@@ -327,6 +393,114 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
         status: "auto_matched",
         aliasNormalized,
         reason: "cjc_with_dac_rule"
+      };
+    }
+  }
+
+  if (isLikelyCjcNoDacAlias(rawName) || isLikelyCjcNoDacAlias(productName)) {
+    const cjcRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('cjc-1295-no-dac-with-ipa', 'cjc-1295-no-dac')
+        and is_active = true
+      order by case
+        when slug = 'cjc-1295-no-dac-with-ipa' then 0
+        when slug = 'cjc-1295-no-dac' then 1
+        else 2
+      end asc
+      limit 1
+    `;
+
+    const cjcNoDacId = cjcRows[0]?.id;
+    if (cjcNoDacId) {
+      await upsertAlias({
+        compoundId: cjcNoDacId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.95,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: cjcNoDacId,
+        confidence: 0.95,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "cjc_no_dac_rule"
+      };
+    }
+  }
+
+  if (isLikelyArgirelineAlias(rawName) || isLikelyArgirelineAlias(productName)) {
+    const argirelineRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug = 'argireline'
+        and is_active = true
+      limit 1
+    `;
+
+    const argirelineId = argirelineRows[0]?.id;
+    if (argirelineId) {
+      await upsertAlias({
+        compoundId: argirelineId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.95,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: argirelineId,
+        confidence: 0.95,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "argireline_rule"
+      };
+    }
+  }
+
+  if (isLikelyPalTetrapeptide7Alias(rawName) || isLikelyPalTetrapeptide7Alias(productName)) {
+    const palRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from compounds
+      where slug in ('pal-tetrapeptide-7', 'matrixyl-3000')
+        and is_active = true
+      order by case when slug = 'pal-tetrapeptide-7' then 0 else 1 end asc
+      limit 1
+    `;
+
+    const palTetrapeptideId = palRows[0]?.id;
+    if (palTetrapeptideId) {
+      await upsertAlias({
+        compoundId: palTetrapeptideId,
+        alias: rawName || rawNameOriginal,
+        aliasNormalized,
+        source: "scraped",
+        confidence: 0.95,
+        status: "auto_matched"
+      });
+
+      return {
+        compoundId: palTetrapeptideId,
+        confidence: 0.95,
+        status: "auto_matched",
+        aliasNormalized,
+        reason: "pal_tetrapeptide_7_rule"
       };
     }
   }
@@ -416,6 +590,16 @@ export async function resolveCompoundAlias(input: string | ResolveCompoundAliasI
     where is_active = true
     order by name asc
   `;
+
+  if (cachedNeedsReviewConfidence !== null) {
+    return {
+      compoundId: null,
+      confidence: cachedNeedsReviewConfidence,
+      status: "needs_review",
+      aliasNormalized,
+      reason: "ai_review_cached"
+    };
+  }
 
   const classification = await classifyCompoundAliasWithAi({
     rawName: rawName || rawNameOriginal,

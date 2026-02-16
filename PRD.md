@@ -210,21 +210,33 @@ Internal jobs:
 - `job:review-ai` now supports bounded slices via `--limit=<N>` / `REVIEW_AI_LIMIT`.
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
-- After enabling `OPENAI_API_KEY`, bounded slices plus manual adjudication completed alias triage queue burn-down.
-- Fresh ingestion rerun on `2026-02-15` reopened alias-review work:
-  - Pre-rerun baseline: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`.
-  - Post-fix + bounded triage totals: `open=7`, `in_progress=0`, `resolved=384`, `ignored=326`.
-  - Remaining open items are currently grouped under `payload.reason='ai_review_cached'`.
-- Final manual adjudication pass (2026-02-16) closed the reopened queue:
-  - Current totals: `open=0`, `in_progress=0`, `resolved=384`, `ignored=333`.
-  - The 7 branded carry-over aliases are now cached as admin-resolved non-trackable aliases to prevent re-queue churn.
+- First coverage expansion batch is onboarded in seed data:
+  - Added 10 vetted storefront/API vendors (coverage moved from 3 vendors / 10 pages to 13 vendors / 21 pages).
+- Expanded ingestion robustness cycle (`2026-02-16`) ran with:
+  - Vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
+  - Finnrick run `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
+- Alias queue delta in expansion cycle:
+  - Before triage: `open=73`, `resolved=384`, `ignored=333`.
+  - Final after bounded/full triage + taxonomy onboarding: `open=0`, `resolved=437`, `ignored=353`.
+  - Net expansion triage delta: `open -73`, `resolved +53`, `ignored +20`.
+- Additional robustness hardening from expansion findings:
+  - Cached `needs_review` aliases now allow deterministic heuristics before returning `ai_review_cached`.
+  - Deterministic tirzepatide shorthand coverage now includes `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and `GLP-2 (T)` forms.
+  - Deterministic semaglutide shorthand coverage now includes `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
+  - Deterministic CJC no-DAC mapping now supports Mod-GRF phrasing.
+  - Deterministic canonical mapping now covers `argireline` and `pal-tetrapeptide-7` cosmetic peptide labels.
+  - Alias descriptor stripping now drops generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`).
+  - Non-product detection expanded for cosmetic/strip storefront noise.
+  - `cagrisema` is intentionally kept as a tracked canonical blend compound (cagrilintide + semaglutide).
 - AI triage reliability fix is in place:
   - Long-model `reason` strings no longer trigger parse fallback to `ai_unavailable_fallback`.
   - Chat-completions fallback request removed unsupported `temperature=0` for `gpt-5-mini`.
 - Vendor runs now prune aged operational-noise history (`review_queue` resolved/ignored + non-trackable alias rows) via retention env settings.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
-- Vendor ingestion has a recent successful run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`.
-- Finnrick ingestion has a recent successful run (`8a108444-b26a-4f2a-94a9-347cc970a140`) under full-access network execution.
+- Vendor ingestion has a recent fully successful run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`.
+- Finnrick ingestion has a recent successful expanded-coverage run (`5233e9be-24fb-42ba-9084-2e8dde507589`) under full-access network execution.
+- Expanded-run quality report is documented in:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`.
 - Cross-vendor exclusion-rule work is started with a report-only audit script:
   - `npm run job:exclusion-audit` generates `reports/exclusion-audit/single-vendor-audit-latest.md`.
   - Latest audit (`2026-02-16T01:01:59Z`) found `23` single-vendor compounds across `28` offers.

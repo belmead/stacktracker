@@ -1,6 +1,8 @@
 const UNIT_TOKENS = new Set(["mg", "mcg", "ug", "g", "ml", "iu", "unit", "units"]);
 
 const DESCRIPTOR_TOKENS = new Set([
+  "peptide",
+  "peptides",
   "vial",
   "vials",
   "capsule",
@@ -54,10 +56,27 @@ const PRICE_PATTERN = /\$\s*\d+(?:,\d{3})*(?:\.\d{1,2})?/g;
 const RETATRUTIDE_SHORTHAND_PATTERNS = [/\bretatrutide\b/i, /\breta\b/i, /\bglp[\s-]?3\b/i, /\bng[\s-]?1[\s-]?rt\b/i];
 const RETATRUTIDE_RT_CONTEXT_PATTERN = /\brt\b/i;
 const RETATRUTIDE_RT_CONTEXT_HINT_PATTERN = /\b(ng|glp|finished|reta|pharma|er|elite)\b/i;
-const TIRZEPATIDE_SHORTHAND_PATTERNS = [/\btirzepatide\b/i, /\btirz\b/i, /\bglp[\s-]?1\s*tz\b/i, /\bng[\s-]?tz\b/i];
+const TIRZEPATIDE_SHORTHAND_PATTERNS = [
+  /\btirzepatide\b/i,
+  /\btirz\b/i,
+  /\bglp[\s-]?1\s*tz\b/i,
+  /\bglp[\s-]?[12]\s*(?:[- ]|\(\s*)?t(?:z)?\s*\)?\b/i,
+  /\bng[\s-]?tz\b/i
+];
 const TIRZEPATIDE_TZ_PATTERN = /\btz\b/i;
 const TIRZEPATIDE_TZ_CONTEXT_PATTERN = /\b(glp|tirz|ng|er|elite)\b/i;
-const NON_TRACKABLE_SUPPLEMENT_PATTERNS = [/\bpre[\s-]?workout\b/i];
+const SEMAGLUTIDE_SHORTHAND_PATTERNS = [/\bsemaglutide\b/i, /\bsema\b/i, /\bglp[\s-]?1\s*(?:[- ]?s|\(\s*s\s*\))\b/i];
+const SEMAGLUTIDE_BARE_GLP1_PATTERN = /\bglp[\s-]?1\b/i;
+const SEMAGLUTIDE_EXCLUSION_PATTERN = /\b(tz|tirz|reta|retatrutide|rt|cag)\b/i;
+const NON_TRACKABLE_SUPPLEMENT_PATTERNS = [
+  /\bpre[\s-]?workout\b/i,
+  /\bdissolv(?:able|ing)\s+strips?\b/i,
+  /\bhair\s+growth\s+formulation\b/i,
+  /\bbody\s+cream\b/i,
+  /\bconditioner\b/i,
+  /\beye\s*glow\b/i,
+  /\bt-?shirt\b/i
+];
 
 function collapseWhitespace(input: string): string {
   return input.trim().replace(/\s+/g, " ");
@@ -98,6 +117,10 @@ export function stripAliasDescriptors(aliasNormalized: string): string {
 
     if (/^\d+(?:\.\d+)?$/.test(token) && next && UNIT_TOKENS.has(next)) {
       index += 1;
+      continue;
+    }
+
+    if (/^\d+(?:\.\d+)?$/.test(token) && next && DESCRIPTOR_TOKENS.has(next)) {
       continue;
     }
 
@@ -177,6 +200,31 @@ export function isLikelyTirzepatideShorthand(input: string): boolean {
   return TIRZEPATIDE_TZ_PATTERN.test(cleaned) && TIRZEPATIDE_TZ_CONTEXT_PATTERN.test(cleaned);
 }
 
+export function isLikelySemaglutideShorthand(input: string): boolean {
+  if (!input) {
+    return false;
+  }
+
+  const cleaned = stripStorefrontNoise(input);
+  if (!cleaned) {
+    return false;
+  }
+
+  if (SEMAGLUTIDE_SHORTHAND_PATTERNS.some((pattern) => pattern.test(cleaned))) {
+    return true;
+  }
+
+  if (/\bglp[\s-]?[23]\b/i.test(cleaned)) {
+    return false;
+  }
+
+  if (!SEMAGLUTIDE_BARE_GLP1_PATTERN.test(cleaned)) {
+    return false;
+  }
+
+  return !SEMAGLUTIDE_EXCLUSION_PATTERN.test(cleaned);
+}
+
 export function isLikelyCagrilintideShorthand(input: string): boolean {
   const normalized = normalizeAlias(input);
   if (!normalized) {
@@ -195,6 +243,37 @@ export function isLikelyCjcWithDacAlias(input: string): boolean {
   }
 
   return stripped === "cjc 1295 with dac";
+}
+
+export function isLikelyCjcNoDacAlias(input: string): boolean {
+  const stripped = stripAliasDescriptors(normalizeAlias(input));
+  if (!stripped) {
+    return false;
+  }
+
+  if (!stripped.includes("cjc 1295") || !stripped.includes("no dac")) {
+    return false;
+  }
+
+  return stripped.includes("with ipa") || stripped.includes("mod grf") || stripped.includes("grf 1 29");
+}
+
+export function isLikelyArgirelineAlias(input: string): boolean {
+  const stripped = stripAliasDescriptors(normalizeAlias(input));
+  if (!stripped) {
+    return false;
+  }
+
+  return stripped.includes("argireline") || stripped.includes("acetyl hexapeptide 8");
+}
+
+export function isLikelyPalTetrapeptide7Alias(input: string): boolean {
+  const stripped = stripAliasDescriptors(normalizeAlias(input));
+  if (!stripped) {
+    return false;
+  }
+
+  return stripped.includes("pal tetrapeptide 7") || stripped.includes("matrixyl 3000");
 }
 
 export function isLikelyNonProductListing(input: string): boolean {

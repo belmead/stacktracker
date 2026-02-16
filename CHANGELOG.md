@@ -29,6 +29,7 @@ All notable changes to Stack Tracker are documented in this file.
 - Data model and SQL:
   - Full schema in `sql/schema.sql`.
   - Seed data in `sql/seed.sql` including initial three vendor URLs.
+  - Seed expansion now includes a first vetted 10-vendor storefront batch (13 active vendors / 21 active vendor pages total).
 - Operations and tooling:
   - `npm run db:bootstrap` to apply schema + seed without direct `psql` usage.
   - Job scripts load `.env.local` via `--env-file-if-exists`.
@@ -71,6 +72,10 @@ All notable changes to Stack Tracker are documented in this file.
 - Discovery/runtime regression tests:
   - `tests/unit/discovery.test.ts` now validates per-origin API cache reuse and unsupported-origin memoization.
   - `tests/unit/worker-alerts.test.ts` validates batched alias-alert HTML formatting/truncation.
+- Expanded alias regression coverage:
+  - `tests/unit/alias-normalize.test.ts` now validates additional tirzepatide shorthand variants (`GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`), CJC no-DAC Mod-GRF phrasing, and new cosmetic/non-product patterns.
+- Expanded-run robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md` with per-vendor ingest/alias metrics, queue deltas, and zero-offer diagnostics.
 
 ### Changed
 - Floating nav category selector now routes to category pages before compound selection.
@@ -103,9 +108,18 @@ All notable changes to Stack Tracker are documented in this file.
 - Added deterministic shorthand fallback matching for:
   - Tirzepatide (`TZ`, `tirz`, `GLP-1 TZ`, `NG-TZ`, `ER-TZ` context).
   - Cagrilintide (`Cag`, `Cagrilinitide` misspelling context).
+- Tirzepatide shorthand matching now also covers `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and parenthesized `GLP-2 (T)` forms.
+- Added deterministic semaglutide shorthand matching for `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
 - Added deterministic CJC-with-DAC alias normalization guard and HTML-entity stripping so titles like `CJC-1295 &#8211; With DAC (10mg)` resolve safely.
+- Added deterministic CJC no-DAC alias normalization for Mod-GRF phrasing (for example `CJC-1295 no DAC ... (Mod GRF 1-29)`).
+- Added deterministic mapping for cosmetic peptide aliases:
+  - `Acetyl Hexapeptide-8 (Argireline)` -> `argireline`
+  - `Pal Tetrapeptide-7 (Matrixyl 3000)` -> `pal-tetrapeptide-7`
+- Alias descriptor stripping now removes generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`) before deterministic matching.
 - Expanded curated taxonomy seeds/mappings to include `Tirzepatide`, `Cagrilintide`, and `LL-37` canonical coverage.
 - Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
+- Vendor seed targets now include the first 10-vendor expansion batch from the vetted storefront list in `README.md`.
+- Compound seed set now includes additional legitimate compounds discovered during expansion triage (including `semaglutide`, `cagrisema`, `thymalin`, `mazdutide`, `survodutide`, and related canonicals).
 - Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
 - Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
 - Discovery now caches Woo/Shopify API results per origin and records source-origin reuse; duplicate API-origin pages in the same run skip redundant offer persistence.
@@ -121,6 +135,7 @@ All notable changes to Stack Tracker are documented in this file.
   - Progress logs now include elapsed time, processing rate, ETA, and last outcome/reason context.
 - `job:review-ai` now supports bounded queue slices via `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled triage runs.
 - Non-trackable supplement aliases with `pre-workout` phrasing are now deterministically auto-ignored to reduce repeated unresolved queue items.
+- Non-product heuristic coverage now includes cosmetic/noise patterns seen in expansion runs (for example dissolving strips, body cream, hair-growth formulations, conditioner, eye-glow, t-shirt).
 - Added automated operational-noise retention pruning in vendor runs:
   - Deletes aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
   - Deletes aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
@@ -132,6 +147,8 @@ All notable changes to Stack Tracker are documented in this file.
   - Chat-completions fallback removed unsupported `temperature=0` for `gpt-5-mini`.
 - `job:review-ai` now refreshes payload metadata for items left open after triage:
   - Updates reason/confidence and triage timestamp so unresolved reason-group reporting reflects current classification outcomes.
+- Cached alias handling for `needs_review` entries now re-checks deterministic rules before returning `ai_review_cached`, enabling queue burn-down without repeated AI calls when heuristics improve.
+- Deterministic blend/stack skip path is now constrained to explicit blend markers to reduce false-ignore risk from dosage-option slash notation.
 
 ### Verified
 - Passing checks under Node 20:
@@ -139,8 +156,17 @@ All notable changes to Stack Tracker are documented in this file.
   - `npm run lint`
   - `npm run test`
 - Verified networked ingestion execution in full-access mode:
+  - Expanded run: `npm run job:vendors` completed with `scrapeRunId=d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
+  - Expanded run: `npm run job:finnrick` succeeded with `scrapeRunId=5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
   - `npm run job:vendors` succeeded (`scrapeRunId=3178fe72-36db-4335-8fff-1b3fe6ec640a`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
   - `npm run job:finnrick` succeeded (`scrapeRunId=8a108444-b26a-4f2a-94a9-347cc970a140`).
+- Verified expansion-cycle triage delta:
+  - Intermediate triage moved queue from `open=73`, `resolved=384`, `ignored=333` (post-vendor-run) to `open=43`, `resolved=396`, `ignored=351`.
+  - Intermediate delta: `open -30`, `resolved +12`, `ignored +18`.
+  - One bounded triage attempt failed with `canceling statement due to statement timeout`; subsequent reruns completed.
+  - Final follow-up triage + taxonomy onboarding closed the queue: `open=0`, `resolved=437`, `ignored=353`.
+  - `GLP1-S` / `GLP-1 (S)` aliases now resolve to canonical `semaglutide`.
+  - `cagrisema` is currently retained as a tracked canonical blend compound.
 - Verified alias triage throughput run:
   - `npm run job:review-ai` completed on `2026-02-15` with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s`.
   - Observed throughput: `82.86 items/min` (`~0.72s/item`), which is faster than the planning estimate (`~1.5s/item`) without code changes.

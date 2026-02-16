@@ -15,7 +15,17 @@ insert into vendors (name, slug, website_url)
 values
   ('Elite Research USA', 'elite-research-usa', 'http://eliteresearchusa.com/'),
   ('Peptide Labs X', 'peptide-labs-x', 'https://peptidelabsx.com/'),
-  ('NexGen Peptides', 'nexgen-peptides', 'https://nexgenpeptides.shop/')
+  ('NexGen Peptides', 'nexgen-peptides', 'https://nexgenpeptides.shop/'),
+  ('Peptidology', 'peptidology', 'https://peptidology.co/'),
+  ('Eternal Peptides', 'eternal-peptides', 'https://eternalpeptides.com/'),
+  ('Pure Tested Peptides', 'pure-tested-peptides', 'https://www.puretestedpeptides.com/'),
+  ('Verified Peptides', 'verified-peptides', 'https://verifiedpeptides.com/'),
+  ('Planet Peptide', 'planet-peptide', 'https://planetpeptide.com/'),
+  ('Simple Peptide', 'simple-peptide', 'https://simplepeptide.com/'),
+  ('Bulk Peptide Supply', 'bulk-peptide-supply', 'https://bulkpeptidesupply.com/'),
+  ('Coastal Peptides', 'coastal-peptides', 'https://coastalpeptides.com/'),
+  ('My Oasis Labs', 'my-oasis-labs', 'https://myoasislabs.com/'),
+  ('PeptiLab Research', 'peptilab-research', 'https://peptilabresearch.com/')
 on conflict (slug) do update
 set
   name = excluded.name,
@@ -35,7 +45,17 @@ with desired_vendor_pages as (
       ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/us-finished/', 'catalog'),
       ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/foundation/', 'catalog'),
       ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/longevity/', 'catalog'),
-      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/strength/', 'catalog')
+      ('nexgen-peptides', 'https://nexgenpeptides.shop/product-category/strength/', 'catalog'),
+      ('peptidology', 'https://peptidology.co/', 'catalog'),
+      ('eternal-peptides', 'https://eternalpeptides.com/', 'catalog'),
+      ('pure-tested-peptides', 'https://www.puretestedpeptides.com/', 'catalog'),
+      ('verified-peptides', 'https://verifiedpeptides.com/', 'catalog'),
+      ('planet-peptide', 'https://planetpeptide.com/', 'catalog'),
+      ('simple-peptide', 'https://simplepeptide.com/', 'catalog'),
+      ('bulk-peptide-supply', 'https://bulkpeptidesupply.com/', 'catalog'),
+      ('coastal-peptides', 'https://coastalpeptides.com/', 'catalog'),
+      ('my-oasis-labs', 'https://myoasislabs.com/', 'catalog'),
+      ('peptilab-research', 'https://peptilabresearch.com/', 'catalog')
   ) as t(vendor_slug, url, page_type)
 )
 insert into vendor_pages (vendor_id, url, page_type)
@@ -51,13 +71,40 @@ set
 insert into compounds (name, slug, description)
 values
   ('BPC-157', 'bpc-157', 'Body protection compound peptide listings across formulations.'),
+  ('Semaglutide', 'semaglutide', 'GLP-1 agonist peptide listings, including shorthand aliases like GLP1-S.'),
   ('Cagrilintide', 'cagrilintide', 'Amylin analog peptide listings and shorthand aliases like CAG.'),
+  ('CagriSema', 'cagrisema', 'Cagrilintide and semaglutide combination listings.'),
   ('LL-37', 'll-37', 'Host-defense peptide listings including vendor variants labeled as LL-37 Complex.'),
   ('Tirzepatide', 'tirzepatide', 'Dual GIP/GLP-1 agonist peptide listings including shorthand aliases like tirz and GLP-1 TZ.'),
   ('Retatrutide', 'retatrutide', 'GLP-related investigational peptide listings.'),
   ('CJC-1295', 'cjc-1295', 'Growth-hormone-related peptide listings.'),
   ('Ipamorelin', 'ipamorelin', 'Peptide listings normalized by formulation.'),
-  ('Tesamorelin', 'tesamorelin', 'Peptide listings normalized by formulation.')
+  ('Tesamorelin', 'tesamorelin', 'Peptide listings normalized by formulation.'),
+  ('Thymalin', 'thymalin', 'Thymic peptide bioregulator listings.'),
+  ('Mazdutide', 'mazdutide', 'GLP-related investigational peptide listings.'),
+  ('Survodutide', 'survodutide', 'GLP-related investigational peptide listings.'),
+  ('Cardiogen', 'cardiogen', 'Peptide bioregulator listings.'),
+  ('Cartalax', 'cartalax', 'Peptide bioregulator listings.'),
+  ('Cortagen', 'cortagen', 'Peptide bioregulator listings.'),
+  ('Vesugen', 'vesugen', 'Peptide bioregulator listings.'),
+  ('Vilon', 'vilon', 'Peptide bioregulator listings.'),
+  ('Pinealon', 'pinealon', 'Peptide bioregulator listings.'),
+  ('Fragment 176-191', 'fragment-176-191', 'HGH fragment peptide listings.'),
+  ('VIP', 'vip', 'Vasoactive intestinal peptide listings.'),
+  ('PNC-27', 'pnc-27', 'Peptide listings normalized by formulation.'),
+  ('CMAX', 'cmax', 'Peptide listings normalized by formulation.'),
+  ('KISP', 'kisp', 'Kisspeptin-family peptide listings.'),
+  ('GHR-2', 'ghr-2', 'Growth-hormone-related peptide listings.'),
+  ('GHR-6', 'ghr-6', 'Growth-hormone-related peptide listings.'),
+  ('Chonluten', 'chonluten', 'Peptide bioregulator listings.'),
+  ('Ovagen', 'ovagen', 'Peptide bioregulator listings.'),
+  ('Prostamax', 'prostamax', 'Peptide bioregulator listings.'),
+  ('Testagen', 'testagen', 'Peptide bioregulator listings.'),
+  ('ARA-290', 'ara-290', 'Erythropoietin-derived peptide listings.'),
+  ('Argireline', 'argireline', 'Acetyl hexapeptide cosmetic peptide listings.'),
+  ('Pal Tetrapeptide-7', 'pal-tetrapeptide-7', 'Matrixyl peptide listings.'),
+  ('SMT10', 'smt10', 'Somatotropin-family peptide listings.'),
+  ('Copper Glow', 'copper-glow', 'Copper-related peptide blend listings.')
 on conflict (slug) do update
 set
   name = excluded.name,

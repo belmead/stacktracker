@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isLikelyArgirelineAlias,
   isLikelyCagrilintideShorthand,
+  isLikelyCjcNoDacAlias,
   isLikelyBlendOrStackProduct,
   isLikelyCjcWithDacAlias,
   isLikelyNonProductListing,
+  isLikelyPalTetrapeptide7Alias,
   isLikelyRetatrutideShorthand,
+  isLikelySemaglutideShorthand,
   isLikelyTirzepatideShorthand,
   normalizeAlias,
   stripAliasDescriptors,
@@ -20,6 +24,16 @@ describe("alias normalization", () => {
   it("strips dosage and formulation suffix tokens", () => {
     const normalized = normalizeAlias("Tesamorelin 10 mg Vial");
     expect(stripAliasDescriptors(normalized)).toBe("tesamorelin");
+  });
+
+  it("strips generic peptide suffix tokens", () => {
+    const normalized = normalizeAlias("Cardiogen Peptide (20MG)");
+    expect(stripAliasDescriptors(normalized)).toBe("cardiogen");
+  });
+
+  it("strips standalone pack counts tied to descriptor tokens", () => {
+    const normalized = normalizeAlias("THYMALIN 10 mg (10 vials)");
+    expect(stripAliasDescriptors(normalized)).toBe("thymalin");
   });
 
   it("strips count suffixes like x30/x100", () => {
@@ -82,6 +96,18 @@ describe("alias normalization", () => {
     expect(isLikelyTirzepatideShorthand("GLP-1 TZ (10MG)")).toBe(true);
     expect(isLikelyTirzepatideShorthand("NG-TZ 10mg")).toBe(true);
     expect(isLikelyTirzepatideShorthand("ER-TZ 10mg")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("GLP2-T 20mg")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("GLP-2TZ 100MG")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("GLP1-T 60mg")).toBe(true);
+    expect(isLikelyTirzepatideShorthand("GLP-2 (T) (10mg)")).toBe(true);
+  });
+
+  it("detects semaglutide shorthand aliases", () => {
+    expect(isLikelySemaglutideShorthand("Semaglutide 10mg")).toBe(true);
+    expect(isLikelySemaglutideShorthand("GLP1-S")).toBe(true);
+    expect(isLikelySemaglutideShorthand("GLP-1 (S) (10mg)")).toBe(true);
+    expect(isLikelySemaglutideShorthand("GLP1")).toBe(true);
+    expect(isLikelySemaglutideShorthand("GLP-1 TZ 10mg")).toBe(false);
   });
 
   it("detects cjc-1295 with dac aliases", () => {
@@ -89,9 +115,29 @@ describe("alias normalization", () => {
     expect(isLikelyCjcWithDacAlias("CJC-1295 no DAC (with IPA)")).toBe(false);
   });
 
+  it("detects cjc-1295 no dac aliases", () => {
+    expect(isLikelyCjcNoDacAlias("CJC-1295 no DAC 5mg (Mod GRF 1-29)")).toBe(true);
+    expect(isLikelyCjcNoDacAlias("CJC-1295 no DAC (with IPA)")).toBe(true);
+    expect(isLikelyCjcNoDacAlias("CJC-1295 with DAC 10mg")).toBe(false);
+  });
+
+  it("detects argireline aliases", () => {
+    expect(isLikelyArgirelineAlias("Acetyl Hexapeptide-8 (Argireline) 200MG")).toBe(true);
+    expect(isLikelyArgirelineAlias("Argireline 50mg")).toBe(true);
+    expect(isLikelyArgirelineAlias("BPC-157 10mg")).toBe(false);
+  });
+
+  it("detects pal tetrapeptide-7 aliases", () => {
+    expect(isLikelyPalTetrapeptide7Alias("Pal Tetrapeptide-7 (Matrixyl 3000) 200MG")).toBe(true);
+    expect(isLikelyPalTetrapeptide7Alias("Matrixyl 3000 100mg")).toBe(true);
+    expect(isLikelyPalTetrapeptide7Alias("CJC-1295 10mg")).toBe(false);
+  });
+
   it("flags non-product listing text", () => {
     expect(isLikelyNonProductListing("Quality-Driven Research Peptides")).toBe(true);
     expect(isLikelyNonProductListing("Pre-Workout TAD (10MG) $65.00 Add to Cart")).toBe(true);
+    expect(isLikelyNonProductListing("NeuroboliX Dissolving Strips")).toBe(true);
+    expect(isLikelyNonProductListing("CU+ Silk Body Cream")).toBe(true);
     expect(isLikelyNonProductListing("BPC-157 10mg Vial")).toBe(false);
   });
 });
