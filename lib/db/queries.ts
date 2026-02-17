@@ -480,6 +480,12 @@ export interface OfferPage {
   total: number;
   page: number;
   pageSize: number;
+  priceSummary: {
+    averageListPriceCents: number | null;
+    lowListPriceCents: number | null;
+    highListPriceCents: number | null;
+    vendorsCounted: number;
+  };
 }
 
 export async function getOffersForVariant(input: {
@@ -500,6 +506,35 @@ export async function getOffersForVariant(input: {
     select count(distinct vendor_id)::int as count
     from offers_current
     where variant_id = ${input.variantId} and is_available = true
+  `;
+
+  const priceSummaryRows = await sql<
+    {
+      averageListPriceCents: number | null;
+      lowListPriceCents: number | null;
+      highListPriceCents: number | null;
+      vendorsCounted: number;
+    }[]
+  >`
+    with ranked as (
+      select
+        v.id as vendor_id,
+        oc.list_price_cents::float8 as list_price_cents,
+        row_number() over (
+          partition by v.id
+          order by ${metricUnsafe} asc nulls last, oc.last_seen_at desc, oc.id asc
+        ) as vendor_rank
+      from offers_current oc
+      inner join vendors v on v.id = oc.vendor_id
+      where oc.variant_id = ${input.variantId} and oc.is_available = true
+    )
+    select
+      avg(list_price_cents)::float8 as average_list_price_cents,
+      min(list_price_cents)::float8 as low_list_price_cents,
+      max(list_price_cents)::float8 as high_list_price_cents,
+      count(*)::int as vendors_counted
+    from ranked
+    where vendor_rank = 1 and list_price_cents is not null
   `;
 
   const rows = await sql<
@@ -581,7 +616,13 @@ export async function getOffersForVariant(input: {
     })),
     total: totalRows[0]?.count ?? 0,
     page: input.page,
-    pageSize: input.pageSize
+    pageSize: input.pageSize,
+    priceSummary: {
+      averageListPriceCents: priceSummaryRows[0]?.averageListPriceCents ?? null,
+      lowListPriceCents: priceSummaryRows[0]?.lowListPriceCents ?? null,
+      highListPriceCents: priceSummaryRows[0]?.highListPriceCents ?? null,
+      vendorsCounted: priceSummaryRows[0]?.vendorsCounted ?? 0
+    }
   };
 }
 
@@ -1296,5 +1337,115 @@ export async function listCompoundsMissingPrimaryCategory(): Promise<
     where c.is_active = true and ccm.id is null
     group by c.id, c.name, c.slug
     order by c.name asc
+  `;
+}
+
+export interface CompoundFormulationCoverageRow {
+  formulationCode: string;
+  offerCount: number;
+}
+
+export interface CompoundFormulationCoverageSnapshot {
+  rows: CompoundFormulationCoverageRow[];
+  totalOffers: number;
+  totalVendors: number;
+}
+
+export async function getCompoundFormulationCoverageSnapshot(input: {
+  compoundSlug: string;
+  totalMassMg: number;
+}): Promise<CompoundFormulationCoverageSnapshot> {
+  const rows = await sql<CompoundFormulationCoverageRow[]>`
+    select
+      cv.formulation_code,
+      count(*)::int as offer_count
+    from offers_current oc
+    inner join compound_variants cv on cv.id = oc.variant_id
+    inner join compounds c on c.id = cv.compound_id
+    where
+      c.slug = ${input.compoundSlug}
+      and oc.is_available = true
+      and cv.total_mass_mg = ${input.totalMassMg}
+    group by cv.formulation_code
+    order by offer_count desc, cv.formulation_code asc
+  `;
+
+  const totals = await sql<
+    {
+      totalOffers: number;
+      totalVendors: number;
+    }[]
+  >`
+    select
+      count(*)::int as total_offers,
+      count(distinct oc.vendor_id)::int as total_vendors
+    from offers_current oc
+    inner join compound_variants cv on cv.id = oc.variant_id
+    inner join compounds c on c.id = cv.compound_id
+    where
+      c.slug = ${input.compoundSlug}
+      and oc.is_available = true
+      and cv.total_mass_mg = ${input.totalMassMg}
+  `;
+
+  return {
+    rows,
+    totalOffers: totals[0]?.totalOffers ?? 0,
+    totalVendors: totals[0]?.totalVendors ?? 0
+  };
+}
+
+export interface TopCompoundCoverageSnapshotRow {
+  compoundSlug: string;
+  compoundName: string;
+  vendorCount: number;
+  offerCount: number;
+}
+
+export async function getTopCompoundCoverageSnapshot(input: {
+  limit: number;
+}): Promise<TopCompoundCoverageSnapshotRow[]> {
+  return sql<TopCompoundCoverageSnapshotRow[]>`
+    select
+      c.slug as compound_slug,
+      c.name as compound_name,
+      count(distinct oc.vendor_id)::int as vendor_count,
+      count(*)::int as offer_count
+    from offers_current oc
+    inner join compound_variants cv on cv.id = oc.variant_id
+    inner join compounds c on c.id = cv.compound_id
+    where oc.is_available = true and c.is_active = true
+    group by c.id, c.slug, c.name
+    having count(*) > 0
+    order by vendor_count desc, offer_count desc, c.slug asc
+    limit ${Math.max(1, input.limit)}
+  `;
+}
+
+export interface RecentVendorRunSummary {
+  id: string;
+  status: ScrapeStatus;
+  startedAt: string;
+  summary: Record<string, unknown>;
+}
+
+export async function getRecentVendorRunSummaries(input: {
+  excludeScrapeRunId?: string;
+  limit: number;
+}): Promise<RecentVendorRunSummary[]> {
+  const excludeFilter = input.excludeScrapeRunId ? sql`and id <> ${input.excludeScrapeRunId}` : sql``;
+
+  return sql<RecentVendorRunSummary[]>`
+    select
+      id,
+      status,
+      started_at,
+      summary
+    from scrape_runs
+    where job_type = 'vendor'
+      and finished_at is not null
+      ${excludeFilter}
+    order by started_at desc
+    limit ${Math.max(1, input.limit)}
   `;
 }

@@ -12,8 +12,10 @@ export interface ParsedProductName {
   packageUnit: string | null;
 }
 
+const MASS_STRENGTH_UNITS = new Set(["mcg", "ug", "mg", "g"]);
+
 const FORMULATION_RULES: Array<{ code: string; label: string; patterns: RegExp[] }> = [
-  { code: "vial", label: "Vial", patterns: [/\bvial\b/, /lyophilized/, /injectable/, /for injection/] },
+  { code: "vial", label: "Vial", patterns: [/\bvials?\b/, /lyophilized/, /injectable/, /for injection/] },
   { code: "cream", label: "Cream", patterns: [/\bcream\b/, /topical/] },
   { code: "troche", label: "Troche", patterns: [/\btroche\b/] },
   { code: "spray", label: "Spray", patterns: [/\bspray\b/, /nasal/] },
@@ -27,13 +29,27 @@ function normalizeWhitespace(input: string): string {
   return input.replace(/\s+/g, " ").trim();
 }
 
-export function detectFormulation(productName: string): { code: string; label: string } {
-  const text = productName.toLowerCase();
+export function detectFormulation(input: {
+  productName: string;
+  strengthUnit: string | null;
+  packageUnit: string | null;
+}): { code: string; label: string } {
+  const text = input.productName.toLowerCase();
 
   for (const rule of FORMULATION_RULES) {
     if (rule.patterns.some((pattern) => pattern.test(text))) {
       return { code: rule.code, label: rule.label };
     }
+  }
+
+  const normalizedPackageUnit = input.packageUnit?.toLowerCase() ?? null;
+  if (normalizedPackageUnit === "vial") {
+    return { code: "vial", label: "Vial" };
+  }
+
+  const normalizedStrengthUnit = input.strengthUnit?.toLowerCase() ?? null;
+  if (normalizedStrengthUnit && MASS_STRENGTH_UNITS.has(normalizedStrengthUnit) && !normalizedPackageUnit) {
+    return { code: "vial", label: "Vial" };
   }
 
   return { code: "other", label: "Other" };
@@ -99,9 +115,13 @@ function parseStrength(text: string): { value: number | null; unit: string | nul
 
 export function parseProductName(productName: string): ParsedProductName {
   const normalizedName = normalizeWhitespace(productName);
-  const formulation = detectFormulation(normalizedName);
   const strength = parseStrength(normalizedName);
   const packageInfo = parsePackageQuantity(normalizedName);
+  const formulation = detectFormulation({
+    productName: normalizedName,
+    strengthUnit: strength.unit,
+    packageUnit: packageInfo.unit
+  });
 
   const sizeLabel =
     strength.value && strength.unit

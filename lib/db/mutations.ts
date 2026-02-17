@@ -784,9 +784,10 @@ export async function upsertCompoundVariant(input: VariantUpsertInput): Promise<
 }
 
 export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"created" | "updated" | "unchanged"> {
-  const current = await sql<
+  const currentExact = await sql<
     {
       id: string;
+      variantId: string;
       listPriceCents: number;
       pricePerMgCents: number | null;
       pricePerMlCents: number | null;
@@ -797,6 +798,7 @@ export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"crea
   >`
     select
       id,
+      variant_id,
       list_price_cents,
       price_per_mg_cents::float8 as price_per_mg_cents,
       price_per_ml_cents::float8 as price_per_ml_cents,
@@ -810,7 +812,39 @@ export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"crea
     limit 1
   `;
 
-  const existing = current[0];
+  let existing = currentExact[0];
+
+  if (!existing) {
+    const currentByProductUrl = await sql<
+      {
+        id: string;
+        variantId: string;
+        listPriceCents: number;
+        pricePerMgCents: number | null;
+        pricePerMlCents: number | null;
+        pricePerVialCents: number | null;
+        pricePerUnitCents: number | null;
+        isAvailable: boolean;
+      }[]
+    >`
+      select
+        id,
+        variant_id,
+        list_price_cents,
+        price_per_mg_cents::float8 as price_per_mg_cents,
+        price_per_ml_cents::float8 as price_per_ml_cents,
+        price_per_vial_cents::float8 as price_per_vial_cents,
+        price_per_unit_cents::float8 as price_per_unit_cents,
+        is_available
+      from offers_current
+      where vendor_id = ${input.vendorId}
+        and product_url = ${input.productUrl}
+      order by updated_at desc
+      limit 1
+    `;
+
+    existing = currentByProductUrl[0];
+  }
 
   if (!existing) {
     const inserted = await sql<
@@ -892,6 +926,7 @@ export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"crea
   }
 
   const unchanged =
+    existing.variantId === input.variantId &&
     existing.listPriceCents === input.listPriceCents &&
     existing.pricePerMgCents === input.metricPrices.price_per_mg &&
     existing.pricePerMlCents === input.metricPrices.price_per_ml &&
@@ -923,6 +958,7 @@ export async function upsertOfferCurrent(input: OfferUpsertInput): Promise<"crea
     await q`
       update offers_current
       set
+        variant_id = ${input.variantId},
         product_name = ${input.productName},
         currency_code = ${input.currencyCode},
         list_price_cents = ${input.listPriceCents},

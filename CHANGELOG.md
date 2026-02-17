@@ -77,8 +77,20 @@ All notable changes to Stack Tracker are documented in this file.
   - `tests/unit/alias-normalize.test.ts` now also validates canonical numeric-token preservation (`BPC-157` dosage-choice tails) and batch-note/kit storefront-noise stripping (`Current batch tested at ...`, `Air Dispersal Kit`).
 - Expanded-run robustness report:
   - `reports/robustness/expanded-vendor-robustness-2026-02-16.md` with per-vendor ingest/alias metrics, queue deltas, and zero-offer diagnostics.
+- Top-compound coverage smoke script:
+  - `scripts/run-top-compounds-smoke-test.ts` plus `npm run job:smoke-top-compounds`.
+  - Compares current top-compound vendor coverage against latest stored baseline and exits non-zero on threshold breaches.
+- Quality-guardrail regression tests:
+  - `tests/unit/quality-guardrails.test.ts` validates invariant, drift, smoke pass/fail, and summary parsing logic.
+- Worker no-offers regression tests:
+  - `tests/unit/worker-no-offers.test.ts` validates `INVALID_PRICING_PAYLOAD` emission and preserved `NO_OFFERS` behavior.
+- Peptide page regression tests:
+  - `tests/unit/peptide-page.test.ts` validates selected-variant average/low/high price summary rendering.
 
 ### Changed
+- Woo discovery pricing precedence now uses storefront-rendered sale values from `price_html` when API numeric fields are stale (for example Eros `S 20MG` now resolves to `$95.99` instead of stale `$119.99`).
+- Compound display naming was normalized for CJC-with-DAC:
+  - canonical `cjc-1295-with-dac-and-ipa` now displays as `CJC-1295 with DAC` while preserving legacy alias matching.
 - Floating nav category selector now routes to category pages before compound selection.
 - Admin home now shows active compounds missing a primary category assignment.
 - Peptide vendor-name links now route internally to vendor catalog pages, with external offer links retained.
@@ -102,6 +114,9 @@ All notable changes to Stack Tracker are documented in this file.
 - Category browsing query behavior now aligns with selector behavior by requiring active variants.
 - Admin category editor save workflow now catches network/fetch failures and surfaces an explicit row-level error.
 - HTML discovery now parses Inertia `#app[data-page]` payloads and converts embedded product/variant records into offers (fixes coverage gaps on custom storefronts like `eliteresearchusa.com`).
+- HTML discovery now also parses Wix `#wix-warmup-data` payloads for storefronts that expose catalog data only via Thunderbolt warmup JSON.
+- HTML discovery now retries empty seeded paths against vendor root URL (same-origin fallback), which stabilizes `eliteresearchusa.com/products`.
+- Discovery and HTML-fetch calls now include transient retry/backoff handling for timeout/connection-reset paths.
 - Alias resolution now attempts deterministic stripped-name matching (removing dosage/formulation descriptors like `10mg`, `vial`, `capsules`) before falling back to AI/review, improving auto-match coverage when base compounds already exist.
 - Alias normalization now strips storefront noise (for example prices and CTA fragments like `add to cart`) before deterministic and AI matching.
 - Blend/stack and non-product listing aliases are auto-skipped for single-compound tracking integrity.
@@ -152,6 +167,7 @@ All notable changes to Stack Tracker are documented in this file.
 - Discovery now caches Woo/Shopify API results per origin and records source-origin reuse; duplicate API-origin pages in the same run skip redundant offer persistence.
 - Vendor cron cadence was updated from every 6 hours to every 24 hours (`vercel.json` now schedules `/api/internal/jobs/vendors` daily at `00:00` UTC).
 - Vendor scrape runtime now emits page-level progress logs (start/completion + per-page deltas) so long-running runs remain observable in stdout.
+- Vendor scrape runtime now emits per-page timing splits (`discoveryWait`, `aliasDet`, `aliasAi`, `dbPersist`) and run-level timing totals for source/network, alias classification path, and DB persistence phases.
 - Peptide detail hero subhead now includes live coverage counts (`vendors` and `variations`) for the current compound.
 - `scrape_runs` now stores `heartbeat_at` and jobs maintain heartbeat updates while running.
 - Added stale-run reconciliation for scrape jobs: aged `running` runs are marked `failed` after TTL at job start.
@@ -177,13 +193,67 @@ All notable changes to Stack Tracker are documented in this file.
   - Updates reason/confidence and triage timestamp so unresolved reason-group reporting reflects current classification outcomes.
 - Cached alias handling for `needs_review` entries now re-checks deterministic rules before returning `ai_review_cached`, enabling queue burn-down without repeated AI calls when heuristics improve.
 - Deterministic blend/stack skip path is now constrained to explicit blend markers to reduce false-ignore risk from dosage-option slash notation.
+- Formulation inference now defaults mass-unit peptide listings without explicit non-vial form factors (for example `BPC-157 10mg`) to `vial`.
+- Offer upsert now reconciles by `(vendor_id, product_url)` fallback to avoid duplicate active rows when normalization changes variant keys (`other` -> `vial`).
+- Vendor runtime now evaluates and persists quality guardrails per run (`scrape_runs.summary.qualityGuardrails`):
+  - `bpc-157` `10mg` vial-share invariant
+  - run-over-run vial-share drift alerts
+  - top-compound vendor-coverage smoke checks
+- Vendor runs now fail when critical quality guardrails fail; drift-only signals remain warning alerts.
+- Added runtime quality-threshold env controls:
+  - `QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS`
+  - `QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE`
+  - `QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP`
+  - `TOP_COMPOUND_SMOKE_LIMIT`
+  - `TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS`
+  - `TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT`
+- Woo zero-priced payload handling now emits explicit diagnostics:
+  - Discovery identifies payloads with product candidates but only zero/empty price fields.
+  - Worker emits `INVALID_PRICING_PAYLOAD` (with sampled product/price-field context) and marks page status `no_data_invalid_pricing`.
+  - True empty/no-catalog paths retain existing `NO_OFFERS` flow.
+- Documentation now clarifies near-term scope direction:
+  - MVP should focus on single-unit/single-vial offer tracking.
+  - Bulk-pack economics and normalization are deferred to v2.
+- Peptide detail pages now show selected-variant pricing summary:
+  - `Average price of <size> <formulation> of <compound>`
+  - `Low` / `High` for the same selected variant.
 
 ### Verified
+- Latest full vendor run (`96ade0dc-cd5d-47aa-859d-064fe416eec6`) completed with:
+  - `status=partial`
+  - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
+  - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=774`
+  - guardrails `invariant=pass`, `drift=pass`, `smoke=pass`
+- Latest coverage snapshot:
+  - `37` active vendors
+  - `45` active vendor pages
+- Alias queue remains fully burned down for alias triage:
+  - `queue_type='alias_match'`: `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
+- Latest run failing-page signals are explicit:
+  - `Alpha G Research` root page -> `NO_OFFERS` (storefront is on `/shop-1`)
+  - `Dragon Pharma Store` root page -> `NO_OFFERS` (products exist; extractor targeting/parsing gap)
+  - `Kits4Less` root page -> `NO_OFFERS` with `DISCOVERY_ATTEMPT_FAILED` (`HTTP 403` Cloudflare)
+  - `PeptiAtlas` root page -> `INVALID_PRICING_PAYLOAD` (Woo products with all-zero prices)
 - Passing checks under Node 20:
   - `npm run typecheck`
   - `npm run lint`
   - `npm run test`
+- Latest robustness commands in this pass:
+  - `npm run typecheck` (pass)
+  - `npm run lint` (pass)
+  - `npm run test` (pass, `64` tests)
+  - `npm run job:review-ai -- --limit=50` (pass, `itemsScanned=0`, `leftOpen=0`)
+  - `npm run job:smoke-top-compounds` (pass, `failureCount=0`, baseline `8807da2b-e1d4-4ad9-93c0-15bf66999254`)
+- Vendor-job reliability blocker observed in this pass:
+  - `npm run job:vendors` attempts failed with transient DB `read ECONNRESET` during `markVendorPageScrape`:
+    - `2981b852-0b96-4c2b-9b68-57344bb8506e`
+    - `4557927e-e446-4896-8278-23ff46ef9b1a`
+    - `8d565b80-2b12-47e4-b33a-cfdb510647ef`
+- Verified invalid-pricing behavior from live event stream:
+  - Run `2981b852-0b96-4c2b-9b68-57344bb8506e` emitted `INVALID_PRICING_PAYLOAD` for `https://peptiatlas.com/` with `productCandidates=59`, `candidatesWithPriceFields=59`, `candidatesWithPositivePrice=0`.
 - Verified networked ingestion execution in full-access mode:
+  - Stabilization run: `npm run job:vendors` completed with `scrapeRunId=783e2611-43ed-471f-b493-d572fa6fd49d` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=48`, `offersUpdated=0`, `offersUnchanged=1210`, `unresolvedAliases=4`, `aliasesSkippedByAi=679`, `aiTasksQueued=1`).
   - Expanded run (third onboarding pass): `npm run job:vendors` completed with `scrapeRunId=9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
   - Expanded run (second onboarding pass): `npm run job:vendors` completed with `scrapeRunId=37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Expanded run: `npm run job:vendors` completed with `scrapeRunId=d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
@@ -199,6 +269,8 @@ All notable changes to Stack Tracker are documented in this file.
   - Second-pass triage detail: first bounded run left all `16` open (`ai_review_cached`), deterministic normalization fixes resolved `3`, and manual adjudication ignored the final `13` branded/ambiguous aliases.
   - Third expansion-cycle triage closed reopened queue `open=69` -> `open=0` with final totals `resolved=463`, `ignored=412`.
   - Third-pass detail: repeated bounded/full `review-ai` scans initially stalled on cached-open aliases; single-letter GLP shorthand hardening resolved `23`, then manual adjudication ignored the final `44` branded/code aliases.
+  - Stabilization-rerun triage moved queue `open=4` -> `open=0` with final totals `resolved=463`, `ignored=416` (`+4 ignored`).
+  - Final cached-open aliases ignored in this pass: `FAT BLASTER`, `P21 (P021)`, `Livagen`.
   - `GLP1-S` / `GLP-1 (S)` aliases now resolve to canonical `semaglutide`.
   - `cagrisema` is currently retained as a tracked canonical blend compound.
 - Verified alias triage throughput run:
@@ -211,6 +283,13 @@ All notable changes to Stack Tracker are documented in this file.
   - After classifier fix + reruns, unresolved queue moved to `open=7`, `resolved=384`, `ignored=326` with reason `ai_review_cached`.
   - Final manual adjudication of those 7 items restored queue closure (`open=0`, `in_progress=0`, `resolved=384`, `ignored=333`).
   - A follow-up vendor run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) completed with `unresolvedAliases=0`, confirming no immediate re-queue.
+- Verified quality-guardrail baseline run:
+  - `npm run job:vendors` completed with `scrapeRunId=fb5f63f0-a867-42ba-b9d3-92f450d8b2a7` and persisted `summary.qualityGuardrails`.
+  - Invariant `bpc157_10mg_vial_majority` passed (`vialOffers=20`, `totalOffers=21`, `vialShare=95.2%`).
+  - Follow-up verification run `8807da2b-e1d4-4ad9-93c0-15bf66999254` passed guardrails (`invariant=pass`, `drift=pass`, `smoke=pass`) against baseline `fb5f63f0-a867-42ba-b9d3-92f450d8b2a7`.
+  - `npm run job:smoke-top-compounds` passes with latest baseline snapshot `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`failureCount=0`).
+  - Strict normalized `bpc-157` `10mg` vial set now contains `20` active offers (including Elite `BPC-157 10mg`).
+- Remaining known reliability gap is Woo zero-priced catalog payloads (`peptiatlas.com`); next change should emit explicit invalid-pricing diagnostics (for example `INVALID_PRICING_PAYLOAD`) instead of `NO_OFFERS`.
 - Verified manual resolution policy for vendor-exclusive noise:
   - Elite branded one-off formulas plus `Peak Power` and currently single-vendor `MK-777` are intentionally excluded (`ignored`) until/if cross-vendor evidence appears.
 - Verified manual-ignore persistence hardening:

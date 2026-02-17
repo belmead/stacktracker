@@ -12,6 +12,36 @@ describe("parseProductName", () => {
     expect(parsed.strengthUnit).toBe("mg");
   });
 
+  it("infers vial formulation for mass-unit peptide listings without explicit form factor", () => {
+    const parsed = parseProductName("BPC-157 10mg");
+
+    expect(parsed.formulationCode).toBe("vial");
+    expect(parsed.formulationLabel).toBe("Vial");
+    expect(parsed.displaySizeLabel).toBe("10mg");
+  });
+
+  it("detects plural vial wording as vial formulation", () => {
+    const parsed = parseProductName("BPC-157 10mg 10 vials");
+
+    expect(parsed.formulationCode).toBe("vial");
+    expect(parsed.packageQuantity).toBe(10);
+    expect(parsed.packageUnit).toBe("vial");
+  });
+
+  it("infers vial formulation when product titles include HTML entity separators", () => {
+    const parsed = parseProductName("BPC-157 &#8211; 10mg");
+
+    expect(parsed.formulationCode).toBe("vial");
+    expect(parsed.displaySizeLabel).toBe("10mg");
+  });
+
+  it("does not infer vial for non-mass strengths", () => {
+    const parsed = parseProductName("BPC-157 10ml");
+
+    expect(parsed.formulationCode).toBe("other");
+    expect(parsed.displaySizeLabel).toBe("10ml");
+  });
+
   it("detects capsule pack quantity", () => {
     const parsed = parseProductName("Retatrutide 30 Capsules");
 

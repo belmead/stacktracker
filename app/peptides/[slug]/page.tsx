@@ -98,6 +98,7 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
   const totalPages = Math.max(1, Math.ceil(offersPage.total / pageSize));
   const coverageSummary = `${coverage.vendorCount} vendor${coverage.vendorCount === 1 ? "" : "s"} · ${coverage.variationCount} variation${coverage.variationCount === 1 ? "" : "s"}`;
   const subhead = `${compound.description ?? "Normalized vendor offers, trends, and ratings by formulation."} ${coverageSummary}`;
+  const variantDescriptor = `${variant.sizeLabel} ${variant.formulationLabel.toLowerCase()}`.trim();
 
   return (
     <main className="page-shell">
@@ -157,6 +158,13 @@ export default async function PeptidePage({ params, searchParams }: PeptidePageP
             </Link>
           ))}
         </div>
+
+        <p className="metric-line">
+          Average price of {variantDescriptor} of {compound.name}: {formatPriceCents(offersPage.priceSummary.averageListPriceCents)}
+        </p>
+        <p className="metric-line">
+          Low: {formatPriceCents(offersPage.priceSummary.lowListPriceCents)} High: {formatPriceCents(offersPage.priceSummary.highListPriceCents)}
+        </p>
 
         <div className="table-wrap">
           <table>

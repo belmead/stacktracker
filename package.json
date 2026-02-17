@@ -19,7 +19,8 @@
     "job:finnrick": "node --env-file-if-exists=.env.local --import tsx scripts/run-finnrick-job.ts",
     "job:review-ai": "node --env-file-if-exists=.env.local --import tsx scripts/run-review-ai-triage.ts",
     "job:exclusion-audit": "node --env-file-if-exists=.env.local --import tsx scripts/run-single-vendor-exclusion-audit.ts",
-    "job:exclusion-enforce": "node --env-file-if-exists=.env.local --import tsx scripts/run-single-vendor-exclusion-enforcement.ts"
+    "job:exclusion-enforce": "node --env-file-if-exists=.env.local --import tsx scripts/run-single-vendor-exclusion-enforcement.ts",
+    "job:smoke-top-compounds": "node --env-file-if-exists=.env.local --import tsx scripts/run-top-compounds-smoke-test.ts"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

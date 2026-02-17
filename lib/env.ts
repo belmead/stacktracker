@@ -27,7 +27,13 @@ const envSchema = z.object({
   SCRAPE_RUN_HEARTBEAT_SECONDS: z.coerce.number().int().positive().default(20),
   SCRAPE_RUN_LAG_ALERT_SECONDS: z.coerce.number().int().positive().default(120),
   REVIEW_QUEUE_RETENTION_DAYS: z.coerce.number().int().positive().default(45),
-  NON_TRACKABLE_ALIAS_RETENTION_DAYS: z.coerce.number().int().positive().default(120)
+  NON_TRACKABLE_ALIAS_RETENTION_DAYS: z.coerce.number().int().positive().default(120),
+  QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS: z.coerce.number().int().positive().default(10),
+  QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE: z.coerce.number().min(0).max(1).default(0.8),
+  QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP: z.coerce.number().min(0).max(1).default(0.2),
+  TOP_COMPOUND_SMOKE_LIMIT: z.coerce.number().int().positive().default(10),
+  TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS: z.coerce.number().int().positive().default(4),
+  TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT: z.coerce.number().min(0).max(1).default(0.35)
 });
 
 export const env = envSchema.parse({
@@ -55,5 +61,11 @@ export const env = envSchema.parse({
   SCRAPE_RUN_HEARTBEAT_SECONDS: process.env.SCRAPE_RUN_HEARTBEAT_SECONDS,
   SCRAPE_RUN_LAG_ALERT_SECONDS: process.env.SCRAPE_RUN_LAG_ALERT_SECONDS,
   REVIEW_QUEUE_RETENTION_DAYS: process.env.REVIEW_QUEUE_RETENTION_DAYS,
-  NON_TRACKABLE_ALIAS_RETENTION_DAYS: process.env.NON_TRACKABLE_ALIAS_RETENTION_DAYS
+  NON_TRACKABLE_ALIAS_RETENTION_DAYS: process.env.NON_TRACKABLE_ALIAS_RETENTION_DAYS,
+  QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS: process.env.QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS,
+  QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE: process.env.QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE,
+  QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP: process.env.QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP,
+  TOP_COMPOUND_SMOKE_LIMIT: process.env.TOP_COMPOUND_SMOKE_LIMIT,
+  TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS: process.env.TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS,
+  TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT: process.env.TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT
 });

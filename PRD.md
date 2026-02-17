@@ -27,6 +27,7 @@ MVP goals:
 - Vendor aggressive rescrape queue.
 - Category browsing pages and category-first navigation.
 - Admin category editor supporting multi-category + primary-category assignment.
+- MVP ingestion scope is single-unit listings (single vial/capsule/etc.) for normalized comparison quality.
 
 ### Out of scope (MVP)
 - Checkout or transactions.
@@ -34,6 +35,7 @@ MVP goals:
 - RBAC / multi-admin authorization.
 - Multi-currency conversion and settlement.
 - Final autonomous ranking of top five compounds.
+- Bulk-pack / multi-vial economics and dedicated bulk-normalization logic (deferred to v2).
 
 ## 3. User Experience Requirements
 
@@ -58,6 +60,9 @@ MVP goals:
 - Hero section.
 - Trend chart with ranges: `1w`, `1m` (default), `6m`, `1y`.
 - Formulation/size options when multiple variants exist.
+- Selected-variant price summary block:
+  - `Average price of <size> <formulation> of <compound>`
+  - `Low` and `High` values for the selected variant.
 - Vendor table (page size 10) with pagination for >10 vendors.
 - Default sort is formulation-aware (vial products prioritize `price_per_mg`).
 - Vendor name links route to internal vendor detail page; external listing links remain available.
@@ -77,12 +82,18 @@ MVP goals:
 - Schedule: every 24 hours.
 - Bounded page concurrency: 2 workers by default (configurable up to 3).
 - Per-page discovery probes run in fallback order (`WooCommerce API -> Shopify API -> HTML -> Firecrawl`) to avoid duplicate upstream load/rate-limit pressure.
+- Woo invalid-pricing diagnostics:
+  - If Woo returns product candidates but all observed price fields are zero/empty, emit explicit `INVALID_PRICING_PAYLOAD` diagnostics (sampled product IDs/names + observed fields).
+  - Preserve `NO_OFFERS` behavior for true empty/no-catalog payloads.
 - Inputs captured:
   - Last scrape timestamp
   - Last run heartbeat timestamp (for lag/stale-run detection)
   - Product price
   - Product size/strength
   - Calculated normalized unit metrics
+- MVP offer-eligibility policy:
+  - Prioritize single-unit offers for comparison pages.
+  - Bulk-pack product handling is intentionally deferred and should be excluded at ingestion once single-unit filters are enabled.
 - Change behavior:
   - If offer is unchanged: update `last_scraped_at` / `last_seen_at`, do not append duplicate historical point.
   - If changed: append new historical record and close previous effective window.
@@ -193,7 +204,10 @@ Internal jobs:
 - Bootstrap schema includes one-primary-category partial unique index on `compound_category_map`.
 - Regression tests cover category query guards and categories page metric/link behavior.
 - Discovery/extraction now supports custom storefront embedded payloads (Inertia `data-page`) in addition to JSON-LD/card parsing.
+- HTML extraction now also supports Wix storefront warmup payloads (`#wix-warmup-data`) for product/price recovery on Wix-only vendors.
+- HTML discovery now falls back to vendor root URL when a seeded page target returns empty HTML.
 - Discovery runtime now memoizes per-origin Woo/Shopify API outcomes and reuses API-origin payloads to reduce redundant probes/persistence work within a scrape run.
+- Discovery and HTML fetch operations now include transient retry/backoff handling to reduce timeout/`ECONNRESET` flakiness.
 - Vendor scraper now uses bounded worker concurrency (`2` default, `3` max) for page targets.
 - Scrape runs now maintain heartbeat timestamps and auto-reconcile stale `running` runs on job start.
 - Runtime emits lag alerts when heartbeat inactivity exceeds threshold.
@@ -209,6 +223,19 @@ Internal jobs:
 - Alias-review alerting now batches unresolved aliases per page and uses timeout-bounded delivery to avoid blocking scrape completion.
 - `job:review-ai` now emits progress logs while scanning large open alias queues.
 - `job:review-ai` now supports bounded slices via `--limit=<N>` / `REVIEW_AI_LIMIT`.
+- Vendor runtime observability now separates and reports:
+  - discovery/network wait by source (`Woo`, `Shopify`, `HTML`, `Firecrawl`)
+  - alias resolution time (`deterministic` vs `AI`)
+  - DB persistence time
+- Formulation inference now defaults mass-unit peptide listings without explicit non-vial form factors (for example `BPC-157 10mg`) to `vial`.
+- Offer persistence now reconciles by `(vendor_id, product_url)` fallback so normalization upgrades do not create duplicate active offers.
+- Vendor runs now evaluate quality guardrails and persist them in `scrape_runs.summary.qualityGuardrails`:
+  - formulation invariant (`bpc-157` `10mg` vial-share)
+  - run-over-run formulation drift alerting
+  - top-compound vendor-coverage smoke checks
+- Top-compound smoke script is available via `npm run job:smoke-top-compounds` and exits non-zero when tracked coverage drops below configured thresholds.
+- Latest guardrail verification run (`8807da2b-e1d4-4ad9-93c0-15bf66999254`) is passing (`invariant=pass`, `drift=pass`, `smoke=pass`).
+- Strict normalized `bpc-157` `10mg` vial coverage currently includes `20` active offers (including Elite `BPC-157 10mg`).
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
 - Coverage expansion batches are onboarded in seed data:
@@ -219,12 +246,15 @@ Internal jobs:
   - Batch 1 vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Batch 2 vendor run `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Batch 3 vendor run `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
+  - Stabilization vendor run `783e2611-43ed-471f-b493-d572fa6fd49d` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=48`, `offersUpdated=0`, `offersUnchanged=1210`, `unresolvedAliases=4`, `aliasesSkippedByAi=679`, `aiTasksQueued=1`).
+  - Guardrail drift verification run `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=1243`, `unresolvedAliases=0`, `aliasesSkippedByAi=668`, `aiTasksQueued=1`).
   - Latest Finnrick run remains `5233e9be-24fb-42ba-9084-2e8dde507589` and is intentionally deferred during active scrape-expansion passes.
 - Alias queue delta across expansion cycles:
   - Batch 1: `open=73` -> `open=0` (net `resolved +53`, `ignored +20`).
   - Batch 2: `open=16` -> `open=0` (net `resolved +3`, `ignored +13`).
   - Batch 3: `open=69` -> `open=0` (net `resolved +23`, `ignored +46`).
-  - Current totals: `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
+  - Stabilization rerun triage/adjudication: `open=4` -> `open=0` (net `ignored +4`).
+  - Current totals: `open=0`, `in_progress=0`, `resolved=463`, `ignored=416`.
 - Additional robustness hardening from expansion findings:
   - Cached `needs_review` aliases now allow deterministic heuristics before returning `ai_review_cached`.
   - Deterministic tirzepatide shorthand coverage now includes `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and `GLP-2 (T)` forms.
@@ -244,6 +274,19 @@ Internal jobs:
 - Vendor runs now prune aged operational-noise history (`review_queue` resolved/ignored + non-trackable alias rows) via retention env settings.
 - Supabase schema drift cleanup has removed legacy unused tables from earlier iterations.
 - Vendor ingestion has a recent fully successful run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) with `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`.
+- Woo invalid-pricing hardening is implemented:
+  - Discovery now captures zero/empty Woo pricing diagnostics for product-candidate payloads.
+  - Worker now emits `INVALID_PRICING_PAYLOAD` (with structured payload context) and `no_data_invalid_pricing` page status for this class.
+  - `NO_OFFERS` behavior remains unchanged for true empty/no-catalog pages.
+- Peptide detail pages now display selected-variant pricing summary (`Average`, `Low`, `High`) based on vendor-deduped list prices.
+- Recent robustness pass checks succeeded:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test` (`64` tests including new invalid-pricing + peptide-page assertions)
+- Current runtime blocker is transient DB write-path instability during vendor jobs:
+  - repeated `read ECONNRESET` failures in `markVendorPageScrape` (`2981b852-0b96-4c2b-9b68-57344bb8506e`, `4557927e-e446-4896-8278-23ff46ef9b1a`, `8d565b80-2b12-47e4-b33a-cfdb510647ef`).
+- Validated event evidence from run `2981b852-0b96-4c2b-9b68-57344bb8506e`:
+  - `https://peptiatlas.com/` emitted `INVALID_PRICING_PAYLOAD` with `productCandidates=59`, `candidatesWithPriceFields=59`, `candidatesWithPositivePrice=0`.
 - Finnrick ingestion has a recent successful expanded-coverage run (`5233e9be-24fb-42ba-9084-2e8dde507589`) under full-access network execution.
 - Expanded-run quality report is documented in:
   - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`.

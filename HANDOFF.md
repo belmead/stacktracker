@@ -4,16 +4,143 @@
 - Date: 2026-02-16
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
-- App status: app/test/lint/typecheck are operational; networked ingestion jobs run successfully in full-access mode.
-- Most recent completed vendor run: `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `offersExcludedByRule=0`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`, `aiTasksQueued=4`, ~`2976.2s` runtime).
+- App status: app/test/lint/typecheck are operational; vendor ingestion currently has intermittent DB `read ECONNRESET` failures during write paths.
+- Most recent completed vendor run (without fatal DB reset): `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=1243`, `offersExcludedByRule=0`, `unresolvedAliases=0`, `aliasesSkippedByAi=668`, `aiTasksQueued=1`, ~`601.0s` runtime).
+- Most recent vendor run attempts (failed due DB reset):
+  - `2981b852-0b96-4c2b-9b68-57344bb8506e` (`status=failed`, progressed to `pagesSuccess=20`, `pagesFailed=2`, validated PeptiAtlas invalid-pricing event).
+  - `4557927e-e446-4896-8278-23ff46ef9b1a` (`status=failed`, early `read ECONNRESET`).
+  - `8d565b80-2b12-47e4-b33a-cfdb510647ef` (`status=failed`, concurrency override `1`, same `read ECONNRESET`).
 - Most recent successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`).
 - Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
 - Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
+- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=416`.
 - Current seeded coverage: `30` active vendors / `38` active vendor pages.
 - Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
 - Operational note: hold additional `job:finnrick` runs until vendor scrape expansion work is complete.
 - Runtime model note: vendor pages run with bounded parallel workers, but per-page discovery probes are fallback-ordered and alias AI classification still executes inline when deterministic/cache matching misses.
+- Immediate next hardening task: stabilize transient DB `read ECONNRESET` failures in vendor-job DB writes and then rerun a full 38-page robustness cycle.
+
+## Continuation Update (2026-02-17, post-expansion rerun)
+- Coverage expanded and validated:
+  - active vendors: `37`
+  - active vendor pages: `45`
+- Latest vendor run:
+  - `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`)
+  - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
+  - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=774`, `aiTasksQueued=4`
+  - quality guardrails: invariant `pass`, drift `pass`, smoke `pass`
+- Latest successful vendor-scoped rerun:
+  - `9bd65c05-d052-4181-b779-d99c72df9506` (`status=success`, `pagesTotal=1`, `pagesSuccess=1`)
+- Alias queue status (`queue_type='alias_match'`):
+  - `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
+- Parse-failure queue status (`queue_type='parse_failure'`):
+  - `open=27` (separate queue from alias triage)
+- Regression/quality cycle revalidated:
+  - pass: `npm run typecheck`
+  - pass: `npm run lint`
+  - pass: `npm run test` (`65` tests)
+  - pass: `npm run job:review-ai -- --limit=50` (`itemsScanned=0`)
+  - pass: `npm run job:smoke-top-compounds` (`failureCount=0`, baseline `96ade0dc-cd5d-47aa-859d-064fe416eec6`)
+
+### Latest failing-page diagnostics (`96ade0dc-cd5d-47aa-859d-064fe416eec6`)
+- `Alpha G Research` (`https://www.alphagresearch.com/`) -> `NO_OFFERS`
+  - Root target is not the best storefront entry point.
+  - Validation confirms `https://www.alphagresearch.com/shop-1` parses offers successfully.
+- `Dragon Pharma Store` (`https://dragonpharmastore.com/`) -> `NO_OFFERS`
+  - Products exist on category/product pages (PrestaShop-style layout), but current root-target extraction path misses them.
+- `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED`
+  - HTML fetch failed with `HTTP 403` (Cloudflare challenge in safe mode).
+- `PeptiAtlas` (`https://peptiatlas.com/`) -> `INVALID_PRICING_PAYLOAD`
+  - Correct explicit diagnostic path is active; Woo payload still exposes product rows with all zero prices.
+
+### Pricing/normalization checks from this pass
+- Woo sale-price parsing fix verified:
+  - Eros `S 20MG` now persists as `9599` cents (`$95.99`) via `price_html` sale extraction.
+- Canonical naming cleanup verified:
+  - `cjc-1295-with-dac-and-ipa` now displays as `CJC-1295 with DAC`; legacy alias strings still resolve.
+
+### Scope decision carried forward
+- Bulk/multi-pack listings are currently still ingested.
+- Next chat should enforce MVP focus on single-unit offers (single vial/capsule/etc.) and defer bulk handling to v2.
+
+## Invalid Pricing + Peptide Price Summary Update (2026-02-16)
+- Woo zero-priced payload hardening shipped:
+  - Discovery now detects Woo payloads where product candidates exist but all observed prices are zero/empty.
+  - Worker now emits `INVALID_PRICING_PAYLOAD` with structured diagnostics and marks page status `no_data_invalid_pricing`.
+  - True empty/no-catalog pages still emit `NO_OFFERS` (`no_data`) behavior unchanged.
+- Verified production-like diagnostic event:
+  - Run: `2981b852-0b96-4c2b-9b68-57344bb8506e`
+  - Event code: `INVALID_PRICING_PAYLOAD`
+  - Target: `https://peptiatlas.com/`
+  - Diagnostic payload highlights: `productsObserved=59`, `productCandidates=59`, `candidatesWithPriceFields=59`, `candidatesWithPositivePrice=0`, sampled product IDs/names with `price/regular_price/sale_price="0"`.
+- Regression coverage added:
+  - `tests/unit/discovery.test.ts` (Woo invalid-pricing detection)
+  - `tests/unit/worker-no-offers.test.ts` (worker event/reporting branch + preserved `NO_OFFERS`)
+  - `tests/unit/peptide-page.test.ts` (selected-variant average/low/high render)
+- Peptide page UX update:
+  - `/peptides/[slug]` now renders selected-variant price summary:
+    - `Average price of <size> <formulation> of <compound>: $...`
+    - `Low: $... High: $...`
+  - Summary values come from vendor-deduped selected-variant list prices (`offers_current` ranked per vendor).
+- Robustness commands in this pass:
+  - pass: `npm run typecheck`
+  - pass: `npm run lint`
+  - pass: `npm run test` (`64` tests)
+  - blocked: `npm run job:vendors` (multiple attempts failed with DB `read ECONNRESET`)
+  - pass: `npm run job:review-ai -- --limit=50` (`itemsScanned=0`)
+  - pass: `npm run job:smoke-top-compounds` (`failureCount=0`, baseline `8807da2b-e1d4-4ad9-93c0-15bf66999254`)
+
+## Quality Guardrails Update (2026-02-16, formulation + smoke enforcement)
+- Formulation normalization hardening:
+  - Mass-unit peptide listings without explicit non-vial form factors (for example `BPC-157 10mg`) now default to `vial`.
+  - Offer upsert now falls back to `(vendor_id, product_url)` reconciliation so normalization upgrades (for example `other` -> `vial`) update rows in-place instead of splitting duplicates.
+- Runtime quality guardrails added to vendor runs:
+  - Invariant: `bpc-157` `10mg` vial-share (`QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS`, `QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE`).
+  - Drift alert: run-over-run vial-share drop threshold (`QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP`).
+  - Smoke test: top-compound vendor-coverage drift (`TOP_COMPOUND_SMOKE_LIMIT`, `TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS`, `TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT`).
+  - Guardrail outputs are persisted under `scrape_runs.summary.qualityGuardrails`; critical guardrail failures now fail vendor jobs.
+- Validation runs:
+  - Full run with guardrail snapshot: `npm run job:vendors` -> `fb5f63f0-a867-42ba-b9d3-92f450d8b2a7`.
+  - Invariant outcome in run summary: `bpc157_10mg_vial_majority = pass` (`vialOffers=20`, `totalOffers=21`, `vialShare=95.2%`).
+  - Follow-up drift/smoke verification run: `npm run job:vendors` -> `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`invariant=pass`, `drift=pass`, `smoke=pass`, `baselineInvariantRunId=fb5f63f0-a867-42ba-b9d3-92f450d8b2a7`).
+  - New smoke script: `npm run job:smoke-top-compounds` currently passes (`failureCount=0`) with latest baseline snapshot `8807da2b-e1d4-4ad9-93c0-15bf66999254`.
+
+## Stabilization Update (2026-02-16, post-fix rerun)
+- Robustness cycle executed:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+  - `npm run job:vendors` -> `783e2611-43ed-471f-b493-d572fa6fd49d`
+  - bounded triage slices: `npm run job:review-ai -- --limit=50` (x3, final verification pass scanned `0`)
+  - no `job:finnrick` run (intentionally deferred)
+- Known failing-target outcomes:
+  - `https://www.biopepz.net/` now `success` via Wix warmup-data HTML extraction.
+  - `https://eliteresearchusa.com/products` now `success` via root-page HTML fallback when target HTML is empty.
+  - `https://simplepeptide.com/` now `success`; no discovery-abort regression.
+  - `https://purerawz.co/` now `success`; no `SCRAPE_PAGE_ERROR` in rerun.
+  - `https://reta-peptide.com/` now `success`; no `SCRAPE_PAGE_ERROR` in rerun.
+  - `https://peptiatlas.com/` remains `NO_OFFERS`/`no_data` (Woo payload exposes products but all prices are `0` in Store API responses).
+- Queue delta for rerun:
+  - Baseline before vendor run: `open=0`, `resolved=463`, `ignored=412`.
+  - After vendor run (pre-triage): `open=4`, `resolved=463`, `ignored=412`.
+  - Final post-triage/adjudication: `open=0`, `resolved=463`, `ignored=416`.
+  - Net: `ignored +4`.
+- Manual adjudication (`ignored`) applied to final cached-open aliases:
+  - `FAT BLASTER` (`biopepz`)
+  - `P21 (P021)` (`purerawz`)
+  - `Livagen` (`purerawz`)
+- Runtime observability added and verified:
+  - discovery/network timing split by source (`Woo`, `Shopify`, `HTML`, `Firecrawl`)
+  - alias resolution timing split (`deterministic` vs `AI`)
+  - DB persistence timing
+  - run-level timing totals for `783e2611-43ed-471f-b493-d572fa6fd49d`:
+    - `discoveryNetworkMs=71642` (`woo=66731`, `shopify=1224`, `html=3687`, `firecrawl=0`)
+    - `aliasDeterministicMs=258153`
+    - `aliasAiMs=300550`
+    - `dbPersistenceMs=1134001`
+- Detailed report update:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 
 ## Expansion Robustness Update (2026-02-16, third vetted batch)
 - Onboarded 12 additional vetted storefront/API vendors in `sql/seed.sql`:

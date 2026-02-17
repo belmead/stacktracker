@@ -15,6 +15,7 @@ export interface DiscoveryAttempt {
   source: "woocommerce_store_api" | "shopify_products_api" | "html" | "firecrawl";
   success: boolean;
   offers: number;
+  durationMs: number;
   error?: string;
 }
 
@@ -25,7 +26,46 @@ export interface DiscoveryResult {
   source: string | null;
   origin: string | null;
   attempts: DiscoveryAttempt[];
+  diagnostics: DiscoveryDiagnostic[];
 }
+
+interface InvalidPricingPriceFields {
+  price: string | number | null;
+  regular_price: string | number | null;
+  sale_price: string | number | null;
+}
+
+interface InvalidPricingParsedFields {
+  price: number | null;
+  regular_price: number | null;
+  sale_price: number | null;
+}
+
+export interface InvalidPricingProductSample {
+  productId: string | null;
+  productName: string | null;
+  observedPriceFields: InvalidPricingPriceFields;
+  parsedPriceCents: InvalidPricingParsedFields;
+}
+
+export interface InvalidPricingPayloadDiagnostic {
+  code: "INVALID_PRICING_PAYLOAD";
+  source: "woocommerce_store_api";
+  pageUrl: string;
+  origin: string;
+  productsObserved: number;
+  productCandidates: number;
+  candidatesWithPriceFields: number;
+  candidatesWithPositivePrice: number;
+  observedPriceFieldCounts: {
+    price: number;
+    regular_price: number;
+    sale_price: number;
+  };
+  sampledProducts: InvalidPricingProductSample[];
+}
+
+export type DiscoveryDiagnostic = InvalidPricingPayloadDiagnostic;
 
 interface CachedApiOffer {
   productUrl: string;
@@ -52,6 +92,7 @@ export interface DiscoveryCache {
 interface SourceExtractionResult {
   offers: ExtractedOffer[];
   origin: string | null;
+  diagnostics: DiscoveryDiagnostic[];
 }
 
 export function createDiscoveryCache(): DiscoveryCache {
@@ -88,6 +129,24 @@ function urlOrigins(target: DiscoveryTarget): string[] {
   return unique(origins);
 }
 
+function buildHtmlFallbackUrls(target: DiscoveryTarget): string[] {
+  const urls: string[] = [];
+
+  try {
+    urls.push(new URL(target.pageUrl).toString());
+  } catch {
+    // noop
+  }
+
+  try {
+    urls.push(new URL("/", target.websiteUrl).toString());
+  } catch {
+    // noop
+  }
+
+  return unique(urls);
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -102,35 +161,83 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-async function fetchJson(url: string): Promise<FetchJsonResult> {
-  const response = await fetchWithTimeout(
-    url,
-    {
-      headers: {
-        "user-agent": env.SCRAPER_USER_AGENT,
-        accept: "application/json,text/plain,*/*"
-      },
-      cache: "no-store"
-    },
-    30_000
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientHttpStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("econnreset") ||
+    message.includes("econnrefused") ||
+    message.includes("etimedout") ||
+    message.includes("socket hang up") ||
+    message.includes("fetch failed") ||
+    message.includes("networkerror") ||
+    message.includes("aborted")
   );
+}
 
-  const text = await response.text();
-  if (!text.trim()) {
-    return { status: response.status, payload: null };
+async function fetchJson(url: string): Promise<FetchJsonResult> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            "user-agent": env.SCRAPER_USER_AGENT,
+            accept: "application/json,text/plain,*/*",
+            "accept-language": "en-US,en;q=0.9"
+          },
+          cache: "no-store"
+        },
+        45_000
+      );
+
+      const text = await response.text();
+      const payload = text.trim()
+        ? (() => {
+            try {
+              return JSON.parse(text) as unknown;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+
+      if (attempt < maxAttempts && isTransientHttpStatus(response.status)) {
+        await sleep(350 * attempt);
+        continue;
+      }
+
+      return {
+        status: response.status,
+        payload
+      };
+    } catch (error) {
+      if (attempt < maxAttempts && isTransientNetworkError(error)) {
+        await sleep(350 * attempt);
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  try {
-    return {
-      status: response.status,
-      payload: JSON.parse(text)
-    };
-  } catch {
-    return {
-      status: response.status,
-      payload: null
-    };
-  }
+  return {
+    status: 599,
+    payload: null
+  };
 }
 
 function toPriceCents(value: number, minorUnit: number): number {
@@ -156,13 +263,41 @@ function toAbsoluteUrl(url: string, baseUrl: string): string | null {
 function parseWooPriceCents(product: Record<string, unknown>): number | null {
   const prices = product.prices;
   if (!prices || typeof prices !== "object") {
+    const priceHtml = typeof product.price_html === "string" ? product.price_html : null;
+    if (priceHtml) {
+      return parseWooPriceHtmlCents(priceHtml);
+    }
+
     return null;
   }
 
   const pricesMap = prices as Record<string, unknown>;
   const minorUnit = typeof pricesMap.currency_minor_unit === "number" ? pricesMap.currency_minor_unit : 2;
-  const priceRaw = pricesMap.price ?? pricesMap.regular_price;
+  const priceHtml = typeof product.price_html === "string" ? product.price_html : null;
+  const displayPrice = priceHtml ? parseWooPriceHtmlCents(priceHtml) : null;
+  if (displayPrice !== null && displayPrice > 0) {
+    return displayPrice;
+  }
 
+  const parsedPrice = parseWooPriceFieldCents(pricesMap.price ?? product.price, minorUnit);
+  if (parsedPrice !== null && parsedPrice > 0) {
+    return parsedPrice;
+  }
+
+  const parsedSalePrice = parseWooPriceFieldCents(pricesMap.sale_price ?? product.sale_price, minorUnit);
+  if (parsedSalePrice !== null && parsedSalePrice > 0) {
+    return parsedSalePrice;
+  }
+
+  const parsedRegularPrice = parseWooPriceFieldCents(pricesMap.regular_price ?? product.regular_price, minorUnit);
+  if (parsedRegularPrice !== null && parsedRegularPrice > 0) {
+    return parsedRegularPrice;
+  }
+
+  return null;
+}
+
+function parseWooPriceFieldCents(priceRaw: unknown, minorUnit: number): number | null {
   if (typeof priceRaw === "number" && Number.isFinite(priceRaw) && priceRaw >= 0) {
     return toPriceCents(priceRaw, minorUnit);
   }
@@ -179,6 +314,182 @@ function parseWooPriceCents(product: Record<string, unknown>): number | null {
   }
 
   return null;
+}
+
+function parseWooPriceHtmlCents(priceHtml: string): number | null {
+  const normalized = priceHtml.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const insMatch = normalized.match(/<ins\b[^>]*>([\s\S]*?)<\/ins>/i);
+  if (insMatch && insMatch[1]) {
+    const insPrice = parseLastCurrencyLikeValueToCents(insMatch[1]);
+    if (insPrice !== null && insPrice > 0) {
+      return insPrice;
+    }
+  }
+
+  const fallbackPrice = parseLastCurrencyLikeValueToCents(normalized);
+  if (fallbackPrice !== null && fallbackPrice > 0) {
+    return fallbackPrice;
+  }
+
+  return null;
+}
+
+function parseLastCurrencyLikeValueToCents(input: string): number | null {
+  const text = input.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ");
+  const matches = Array.from(text.matchAll(/(\d[\d,]*(?:\.\d{1,2})?)/g));
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const last = matches[matches.length - 1]?.[1] ?? null;
+  if (!last) {
+    return null;
+  }
+
+  const numeric = Number(last.replace(/,/g, ""));
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+
+  return Math.round(numeric * 100);
+}
+
+function normalizeWooPriceField(value: unknown): string | number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  return null;
+}
+
+function normalizeWooProductId(value: unknown): string | null {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+}
+
+function inspectWooInvalidPricingPayload(input: {
+  payload: unknown;
+  target: DiscoveryTarget;
+  origin: string;
+}): InvalidPricingPayloadDiagnostic | null {
+  if (!Array.isArray(input.payload)) {
+    return null;
+  }
+
+  let productsObserved = 0;
+  let productCandidates = 0;
+  let candidatesWithPriceFields = 0;
+  let candidatesWithPositivePrice = 0;
+  const observedPriceFieldCounts = {
+    price: 0,
+    regular_price: 0,
+    sale_price: 0
+  };
+  const sampledProducts: InvalidPricingProductSample[] = [];
+
+  for (const item of input.payload) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    productsObserved += 1;
+    const product = item as Record<string, unknown>;
+    const productId = normalizeWooProductId(product.id);
+    const productName = typeof product.name === "string" ? product.name.trim() || null : null;
+
+    if (!productName && !productId) {
+      continue;
+    }
+
+    productCandidates += 1;
+
+    const pricesMap =
+      product.prices && typeof product.prices === "object" ? (product.prices as Record<string, unknown>) : null;
+    const minorUnit = typeof pricesMap?.currency_minor_unit === "number" ? pricesMap.currency_minor_unit : 2;
+
+    const observedPriceFields: InvalidPricingPriceFields = {
+      price: normalizeWooPriceField(pricesMap?.price ?? product.price),
+      regular_price: normalizeWooPriceField(pricesMap?.regular_price ?? product.regular_price),
+      sale_price: normalizeWooPriceField(pricesMap?.sale_price ?? product.sale_price)
+    };
+
+    const parsedPriceCents: InvalidPricingParsedFields = {
+      price: parseWooPriceFieldCents(observedPriceFields.price, minorUnit),
+      regular_price: parseWooPriceFieldCents(observedPriceFields.regular_price, minorUnit),
+      sale_price: parseWooPriceFieldCents(observedPriceFields.sale_price, minorUnit)
+    };
+
+    const hasAnyPriceField =
+      observedPriceFields.price !== null ||
+      observedPriceFields.regular_price !== null ||
+      observedPriceFields.sale_price !== null;
+
+    if (hasAnyPriceField) {
+      candidatesWithPriceFields += 1;
+    }
+
+    if (observedPriceFields.price !== null) {
+      observedPriceFieldCounts.price += 1;
+    }
+    if (observedPriceFields.regular_price !== null) {
+      observedPriceFieldCounts.regular_price += 1;
+    }
+    if (observedPriceFields.sale_price !== null) {
+      observedPriceFieldCounts.sale_price += 1;
+    }
+
+    const hasPositivePrice =
+      (parsedPriceCents.price !== null && parsedPriceCents.price > 0) ||
+      (parsedPriceCents.regular_price !== null && parsedPriceCents.regular_price > 0) ||
+      (parsedPriceCents.sale_price !== null && parsedPriceCents.sale_price > 0);
+
+    if (hasPositivePrice) {
+      candidatesWithPositivePrice += 1;
+    }
+
+    if (sampledProducts.length < 5) {
+      sampledProducts.push({
+        productId,
+        productName,
+        observedPriceFields,
+        parsedPriceCents
+      });
+    }
+  }
+
+  if (productCandidates === 0 || candidatesWithPriceFields === 0 || candidatesWithPositivePrice > 0) {
+    return null;
+  }
+
+  return {
+    code: "INVALID_PRICING_PAYLOAD",
+    source: "woocommerce_store_api",
+    pageUrl: input.target.pageUrl,
+    origin: input.origin,
+    productsObserved,
+    productCandidates,
+    candidatesWithPriceFields,
+    candidatesWithPositivePrice,
+    observedPriceFieldCounts,
+    sampledProducts
+  };
 }
 
 function dedupeOffers(offers: ExtractedOffer[]): ExtractedOffer[] {
@@ -260,7 +571,7 @@ function isSourceUnsupported(input: {
 }
 
 function isDefinitiveUnsupportedStatus(status: number): boolean {
-  return status === 401 || status === 403 || status === 404 || status === 410;
+  return status === 401 || status === 404 || status === 410;
 }
 
 export function offersFromWooCommercePayload(input: {
@@ -397,6 +708,8 @@ export function offersFromShopifyPayload(input: {
 }
 
 async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: DiscoveryCache): Promise<SourceExtractionResult> {
+  const diagnostics: DiscoveryDiagnostic[] = [];
+
   const origins = urlOrigins(target);
   for (const origin of origins) {
     const cached = cache?.apiResultsByOrigin.get(origin);
@@ -406,7 +719,8 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: Discov
           target,
           offers: cached.offers
         }),
-        origin
+        origin,
+        diagnostics: []
       };
     }
 
@@ -427,6 +741,7 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: Discov
       const endpoint = new URL("/wp-json/wc/store/v1/products", origin);
       endpoint.searchParams.set("per_page", "100");
       endpoint.searchParams.set("page", String(page));
+      endpoint.searchParams.set("doing_wp_cron", String(Date.now()));
 
       const result = await fetchJson(endpoint.toString());
       if (isDefinitiveUnsupportedStatus(result.status)) {
@@ -440,6 +755,15 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: Discov
       });
 
       if (offers.length === 0) {
+        const invalidPricing = inspectWooInvalidPricingPayload({
+          payload: result.payload,
+          target,
+          origin
+        });
+        if (invalidPricing) {
+          diagnostics.push(invalidPricing);
+        }
+
         if (page === 1) {
           break;
         }
@@ -465,7 +789,8 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: Discov
 
       return {
         offers: deduped,
-        origin
+        origin,
+        diagnostics: []
       };
     }
 
@@ -480,7 +805,8 @@ async function extractFromWooCommerceApi(target: DiscoveryTarget, cache?: Discov
 
   return {
     offers: [],
-    origin: null
+    origin: null,
+    diagnostics
   };
 }
 
@@ -494,7 +820,8 @@ async function extractFromShopifyApi(target: DiscoveryTarget, cache?: DiscoveryC
           target,
           offers: cached.offers
         }),
-        origin
+        origin,
+        diagnostics: []
       };
     }
 
@@ -537,14 +864,16 @@ async function extractFromShopifyApi(target: DiscoveryTarget, cache?: DiscoveryC
 
       return {
         offers: deduped,
-        origin
+        origin,
+        diagnostics: []
       };
     }
   }
 
   return {
     offers: [],
-    origin: null
+    origin: null,
+    diagnostics: []
   };
 }
 
@@ -604,21 +933,26 @@ export async function discoverOffers(input: {
   cache?: DiscoveryCache;
 }): Promise<DiscoveryResult> {
   const attempts: DiscoveryAttempt[] = [];
+  const diagnostics: DiscoveryDiagnostic[] = [];
 
+  const wooStartedAt = Date.now();
   try {
     const wooResult = await extractFromWooCommerceApi(input.target, input.cache);
+    diagnostics.push(...wooResult.diagnostics);
     const wooOffers = wooResult.offers;
     attempts.push({
       source: "woocommerce_store_api",
       success: wooOffers.length > 0,
-      offers: wooOffers.length
+      offers: wooOffers.length,
+      durationMs: Date.now() - wooStartedAt
     });
     if (wooOffers.length > 0) {
       return {
         offers: wooOffers,
         source: "woocommerce_store_api",
         origin: wooResult.origin,
-        attempts
+        attempts,
+        diagnostics
       };
     }
   } catch (error) {
@@ -626,24 +960,28 @@ export async function discoverOffers(input: {
       source: "woocommerce_store_api",
       success: false,
       offers: 0,
+      durationMs: Date.now() - wooStartedAt,
       error: error instanceof Error ? error.message : "unknown"
     });
   }
 
+  const shopifyStartedAt = Date.now();
   try {
     const shopifyResult = await extractFromShopifyApi(input.target, input.cache);
     const shopifyOffers = shopifyResult.offers;
     attempts.push({
       source: "shopify_products_api",
       success: shopifyOffers.length > 0,
-      offers: shopifyOffers.length
+      offers: shopifyOffers.length,
+      durationMs: Date.now() - shopifyStartedAt
     });
     if (shopifyOffers.length > 0) {
       return {
         offers: shopifyOffers,
         source: "shopify_products_api",
         origin: shopifyResult.origin,
-        attempts
+        attempts,
+        diagnostics
       };
     }
   } catch (error) {
@@ -651,29 +989,55 @@ export async function discoverOffers(input: {
       source: "shopify_products_api",
       success: false,
       offers: 0,
+      durationMs: Date.now() - shopifyStartedAt,
       error: error instanceof Error ? error.message : "unknown"
     });
   }
 
+  const htmlStartedAt = Date.now();
   try {
-    const html = await input.fetchPageHtml(input.target.pageUrl);
-    const htmlOffers = extractOffersFromHtml({
-      html,
-      vendorPageId: input.target.vendorPageId,
-      vendorId: input.target.vendorId,
-      pageUrl: input.target.pageUrl
-    });
+    const htmlCandidateUrls = buildHtmlFallbackUrls(input.target);
+    let htmlOffers: ExtractedOffer[] = [];
+    const htmlErrors: string[] = [];
+
+    for (const candidateUrl of htmlCandidateUrls) {
+      const html = await input.fetchPageHtml(candidateUrl);
+      if (!html.trim()) {
+        htmlErrors.push(`${candidateUrl}:empty_html`);
+        continue;
+      }
+
+      const extracted = extractOffersFromHtml({
+        html,
+        vendorPageId: input.target.vendorPageId,
+        vendorId: input.target.vendorId,
+        pageUrl: candidateUrl
+      });
+
+      if (extracted.length > htmlOffers.length) {
+        htmlOffers = extracted;
+      }
+
+      if (extracted.length > 0) {
+        break;
+      }
+    }
+
+    const htmlError = htmlOffers.length === 0 && htmlErrors.length > 0 ? htmlErrors.join(" | ").slice(0, 240) : undefined;
     attempts.push({
       source: "html",
       success: htmlOffers.length > 0,
-      offers: htmlOffers.length
+      offers: htmlOffers.length,
+      durationMs: Date.now() - htmlStartedAt,
+      error: htmlError
     });
     if (htmlOffers.length > 0) {
       return {
         offers: htmlOffers,
         source: "html",
         origin: null,
-        attempts
+        attempts,
+        diagnostics
       };
     }
   } catch (error) {
@@ -681,18 +1045,21 @@ export async function discoverOffers(input: {
       source: "html",
       success: false,
       offers: 0,
+      durationMs: Date.now() - htmlStartedAt,
       error: error instanceof Error ? error.message : "unknown"
     });
   }
 
   if (env.FIRECRAWL_API_KEY) {
+    const firecrawlStartedAt = Date.now();
     try {
       const firecrawlHtml = await scrapeHtmlWithFirecrawl(input.target.pageUrl);
       if (!firecrawlHtml) {
         attempts.push({
           source: "firecrawl",
           success: false,
-          offers: 0
+          offers: 0,
+          durationMs: Date.now() - firecrawlStartedAt
         });
       } else {
         const firecrawlOffers = extractOffersFromHtml({
@@ -704,14 +1071,16 @@ export async function discoverOffers(input: {
         attempts.push({
           source: "firecrawl",
           success: firecrawlOffers.length > 0,
-          offers: firecrawlOffers.length
+          offers: firecrawlOffers.length,
+          durationMs: Date.now() - firecrawlStartedAt
         });
         if (firecrawlOffers.length > 0) {
           return {
             offers: firecrawlOffers,
             source: "firecrawl",
             origin: null,
-            attempts
+            attempts,
+            diagnostics
           };
         }
       }
@@ -720,6 +1089,7 @@ export async function discoverOffers(input: {
         source: "firecrawl",
         success: false,
         offers: 0,
+        durationMs: Date.now() - firecrawlStartedAt,
         error: error instanceof Error ? error.message : "unknown"
       });
     }
@@ -729,6 +1099,7 @@ export async function discoverOffers(input: {
     offers: [],
     source: null,
     origin: null,
-    attempts
+    attempts,
+    diagnostics
   };
 }

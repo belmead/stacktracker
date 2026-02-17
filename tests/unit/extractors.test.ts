@@ -92,4 +92,51 @@ describe("extractOffersFromHtml", () => {
     expect(offers[0]?.listPriceCents).toBe(7500);
     expect(offers[0]?.rawPayload?.extractor).toBe("inertia_data_page");
   });
+
+  it("extracts product offers from Wix warmup data payloads", () => {
+    const warmupData = {
+      appsWarmupData: {
+        stores: {
+          widget: {
+            catalog: {
+              category: {
+                productsWithMetaData: {
+                  list: [
+                    {
+                      name: "Tirz 30mg",
+                      price: 70,
+                      urlPart: "tirz-30",
+                      isInStock: true,
+                      productType: "physical"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    const html = `
+      <html>
+        <body>
+          <script type="application/json" id="wix-warmup-data">${JSON.stringify(warmupData)}</script>
+        </body>
+      </html>
+    `;
+
+    const offers = extractOffersFromHtml({
+      html,
+      vendorPageId: "page-2",
+      vendorId: "vendor-2",
+      pageUrl: "https://example.test"
+    });
+
+    expect(offers).toHaveLength(1);
+    expect(offers[0]?.productName).toBe("Tirz 30mg");
+    expect(offers[0]?.productUrl).toBe("https://example.test/product-page/tirz-30");
+    expect(offers[0]?.listPriceCents).toBe(7000);
+    expect(offers[0]?.rawPayload?.extractor).toBe("wix_warmup_data");
+  });
 });

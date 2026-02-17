@@ -8,58 +8,63 @@ Start by reading:
 - `/Users/belmead/Documents/stacktracker/PRD.md`
 - `/Users/belmead/Documents/stacktracker/CHANGELOG.md`
 - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
+- `/Users/belmead/Documents/stacktracker/NEXT_CHAT_PROMPT.md`
 
 Current state to assume:
-1. Alias triage queue is fully burned down again:
-   - `open=0`, `in_progress=0`, `resolved=463`, `ignored=412`.
-2. Coverage after third expansion batch:
-   - active vendors: `30`
-   - active vendor pages: `38`
-3. Latest vendor runs:
-   - latest expanded run: `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`, `aiTasksQueued=4`, `duration≈2975s`)
-   - latest fully successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a`
-4. Latest Finnrick run remains:
-   - `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun during scrape-expansion unless explicitly requested)
-5. Important mapping/rules:
-   - `GLP1-S` / `GLP-1 (S)` / `GLP1` => `semaglutide`
-   - tirzepatide shorthand includes `GLP2-T` / `GLP-2TZ` / `GLP1-T` / `GLP-2 (T)`
-   - single-letter GLP shorthand supports `R ... mg` / `S ... mg` / `T ... mg` only (`mg` required)
-   - `cagrisema` is intentionally kept as a tracked canonical blend compound
-   - descriptor stripping keeps canonical numeric identity (for example `BPC-157`) while removing dosage tails
-   - storefront-noise stripping includes `Current batch tested at ...` and `with Air Dispersal Kit`
-   - deterministic cosmetic mappings for `argireline` and `pal-tetrapeptide-7` are active
-6. Known failures in latest expanded run:
-   - `https://www.biopepz.net/` -> `NO_OFFERS`
-   - `https://eliteresearchusa.com/products` -> `NO_OFFERS`
-   - `https://peptiatlas.com/` -> `NO_OFFERS`
-   - `https://simplepeptide.com/` -> `DISCOVERY_ATTEMPT_FAILED` (`woocommerce_store_api` aborted) + `NO_OFFERS`
-   - `https://purerawz.co/` -> `SCRAPE_PAGE_ERROR` (`read ECONNRESET`)
-   - `https://reta-peptide.com/` -> `SCRAPE_PAGE_ERROR` (`read ECONNRESET`)
-7. Runtime architecture constraints to respect while improving throughput:
-   - page targets already run with bounded worker parallelism
-   - discovery probes are fallback-ordered per page (`Woo -> Shopify -> HTML -> Firecrawl`) by design
-   - unresolved alias AI classification is still inline in scrape offer persistence path
+1. Coverage:
+   - active vendors: `37`
+   - active vendor pages: `45`
+2. Alias queue is clean (`queue_type='alias_match'`):
+   - `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
+3. Parse-failure queue remains separate:
+   - `queue_type='parse_failure'`: `open=27`
+4. Latest full vendor run:
+   - `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`)
+   - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
+   - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
+   - `unresolvedAliases=0`, `aliasesSkippedByAi=774`
+   - quality guardrails: invariant/drift/smoke all `pass`
+5. Latest Finnrick run:
+   - `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun unless explicitly requested)
+6. Woo invalid-pricing handling is active:
+   - PeptiAtlas emits `INVALID_PRICING_PAYLOAD` with detailed diagnostics (not generic `NO_OFFERS`)
+7. Woo sale-price parsing fix is active:
+   - Eros `S 20MG` now persists as `$95.99` (`9599` cents) via `price_html` sale extraction
+8. CJC naming cleanup is active:
+   - canonical `cjc-1295-with-dac-and-ipa` displays as `CJC-1295 with DAC` (legacy alias mapping preserved)
+9. Remaining failed pages in latest run:
+   - `https://www.alphagresearch.com/` -> `NO_OFFERS` (storefront products are on `/shop-1`)
+   - `https://dragonpharmastore.com/` -> `NO_OFFERS` (site has products; current root-target extraction gap)
+   - `https://kits4less.com/` -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`HTTP 403`, Cloudflare)
+   - `https://peptiatlas.com/` -> `INVALID_PRICING_PAYLOAD` (expected)
+10. Product-scope direction:
+   - bulk-pack handling should be deferred to v2
+   - MVP should focus on single-unit/single-vial offers only
 
-Pick up by:
-1. Stabilize third-batch scrape reliability on the six failed/zero-offer targets listed above.
-2. Add runtime observability that separates:
-   - network/discovery wait time per source
-   - alias resolution time (deterministic vs AI)
-   - DB persistence time
-3. Run robustness cycle:
+Primary tasks for next chat:
+1. Enforce single-unit offer policy at ingestion:
+   - add deterministic exclusion for bulk/pack/kit/multi-vial offers
+   - ensure these are excluded before variant/price aggregation for public views
+   - add regression tests for single-vial-only filtering path
+2. Fix `NO_OFFERS` gaps for real storefronts:
+   - Alpha G Research: retarget seeded page to a parseable storefront path (`/shop-1`)
+   - Dragon Pharma Store: add extraction support for current PrestaShop-style listing structure (or retarget to parseable category endpoint)
+   - Kits4Less: document/handle Cloudflare 403 behavior explicitly (safe-mode limitation, retry posture, and event payload quality)
+3. Re-run robustness cycle:
    - `npm run typecheck`
    - `npm run lint`
    - `npm run test`
    - `npm run job:vendors`
-   - `npm run job:review-ai -- --limit=50` (repeat bounded slices as needed)
+   - `npm run job:review-ai -- --limit=50` (repeat bounded slices only if alias queue reopens)
+   - `npm run job:smoke-top-compounds`
 4. Keep alias quality strict:
-   - no storefront noise
+   - no storefront noise strings
    - no non-peptide products
-   - no vendor-only custom blends unless explicitly canonicalized (`cagrisema` currently allowed)
-5. Add/expand regression coverage for any new parsing or alias normalization edge cases found.
-6. Update:
+   - no vendor-only blends unless explicitly canonicalized (`cagrisema` currently allowed)
+5. Update docs after completion:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
    - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
    - `/Users/belmead/Documents/stacktracker/README.md`
    - `/Users/belmead/Documents/stacktracker/PRD.md`
    - `/Users/belmead/Documents/stacktracker/CHANGELOG.md`
+   - `/Users/belmead/Documents/stacktracker/NEXT_CHAT_PROMPT.md`

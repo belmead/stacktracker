@@ -32,12 +32,12 @@ const COMPOUND_SEEDS: CompoundSeed[] = [
     aliases: ["Cagrilintide", "Cagrilinitide", "Cag", "CAG"]
   },
   {
-    name: "CJC-1295 with DAC (and IPA)",
+    name: "CJC-1295 with DAC",
     slug: "cjc-1295-with-dac-and-ipa",
-    description: "Blend entry for CJC-1295 with DAC combined with Ipamorelin.",
+    description: "CJC-1295 with DAC peptide listings.",
     aliases: [
-      "CJC-1295 with DAC (and IPA)",
       "CJC-1295 with DAC",
+      "CJC-1295 with DAC (and IPA)",
       "CJC-1295 - With DAC",
       "CJC-1295 – With DAC",
       "CJC-1295 WITH DAC + IPA",

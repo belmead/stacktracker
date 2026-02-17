@@ -32,8 +32,20 @@ interface InertiaProductLike {
   archived?: boolean | number;
 }
 
+interface WixWarmupProductLike {
+  name?: string;
+  price?: string | number;
+  formattedPrice?: string;
+  urlPart?: string;
+  isInStock?: boolean;
+  productType?: string;
+  inventory?: {
+    status?: string;
+  };
+}
+
 const EXCLUDED_PATH_PATTERNS = [/\/cart\b/, /\/checkout\b/, /\/my-account\b/, /\/account\b/, /\/wishlist\b/, /\/search\b/, /\/blog\b/];
-const REQUIRED_PATH_PATTERNS = [/\/product\//, /\/products\//, /\/product-category\//, /\/shop\/?/];
+const REQUIRED_PATH_PATTERNS = [/\/product\//, /\/products\//, /\/product-page\//, /\/product-category\//, /\/shop\/?/];
 const EXCLUDED_QUERY_KEYS = ["add-to-cart", "add_to_cart", "add-to-wishlist", "add_to_wishlist"];
 
 function isLikelyProductUrl(urlValue: string): boolean {
@@ -283,6 +295,115 @@ function parseInertiaDataPage(html: string): JsonMap | null {
       return null;
     }
   }
+}
+
+function parseWixWarmupData(html: string): JsonMap | null {
+  const $ = cheerio.load(html);
+  const raw = $("#wix-warmup-data").text();
+  if (!raw || !raw.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as JsonMap) : null;
+  } catch {
+    return null;
+  }
+}
+
+function collectWixWarmupProducts(value: unknown, out: WixWarmupProductLike[]): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectWixWarmupProducts(item, out);
+    }
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const node = value as {
+    productsWithMetaData?: {
+      list?: unknown;
+    };
+  };
+
+  const list = node.productsWithMetaData?.list;
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (item && typeof item === "object") {
+        out.push(item as WixWarmupProductLike);
+      }
+    }
+  }
+
+  for (const nested of Object.values(value)) {
+    if (nested && typeof nested === "object") {
+      collectWixWarmupProducts(nested, out);
+    }
+  }
+}
+
+function extractFromWixWarmupData(html: string, context: ExtractContext): ExtractedOffer[] {
+  const parsed = parseWixWarmupData(html);
+  if (!parsed) {
+    return [];
+  }
+
+  const products: WixWarmupProductLike[] = [];
+  collectWixWarmupProducts(parsed, products);
+  if (products.length === 0) {
+    return [];
+  }
+
+  const offers: ExtractedOffer[] = [];
+  const seen = new Set<string>();
+
+  for (const product of products) {
+    if (product.productType && product.productType.toLowerCase() !== "physical") {
+      continue;
+    }
+
+    const productName = cleanupText(typeof product.name === "string" ? product.name : "");
+    if (!productName) {
+      continue;
+    }
+
+    const priceCents = parsePriceCents(product.price ?? product.formattedPrice);
+    if (!priceCents || priceCents <= 0) {
+      continue;
+    }
+
+    const urlPart = typeof product.urlPart === "string" ? product.urlPart.trim() : "";
+    const rawProductUrl = urlPart ? `/product-page/${urlPart}` : context.pageUrl;
+    const productUrl = toAbsoluteUrl(context.pageUrl, rawProductUrl) ?? context.pageUrl;
+    if (!isLikelyProductUrl(productUrl)) {
+      continue;
+    }
+
+    const inventoryStatus = typeof product.inventory?.status === "string" ? product.inventory.status.toLowerCase() : "";
+    const isInStock =
+      typeof product.isInStock === "boolean" ? product.isInStock : inventoryStatus ? inventoryStatus !== "out_of_stock" : true;
+
+    const offer = buildExtractedOffer({
+      vendorPageId: context.vendorPageId,
+      vendorId: context.vendorId,
+      pageUrl: context.pageUrl,
+      productUrl,
+      productName,
+      priceCents,
+      availabilityText: isInStock ? "in_stock" : "out_of_stock",
+      payload: {
+        extractor: "wix_warmup_data"
+      }
+    });
+
+    pushUnique(offers, offer, seen);
+  }
+
+  return offers;
 }
 
 function formatVariantAmount(amount: string | number | undefined, unit: string | undefined): string | null {
@@ -583,10 +704,19 @@ export function extractOffersFromHtml(input: {
     return inertia;
   }
 
+  const wixWarmup = extractFromWixWarmupData(input.html, context);
   const structured = extractFromJsonLd(input.html, context);
   const primary = extractFromCards(input.html, context);
   const merged = [...inertia];
   const seen = new Set(merged.map((item) => `${item.vendorId}::${item.productUrl}`));
+
+  for (const offer of wixWarmup) {
+    pushUnique(merged, offer, seen);
+  }
+
+  if (merged.length >= 3) {
+    return merged;
+  }
 
   for (const offer of structured) {
     pushUnique(merged, offer, seen);

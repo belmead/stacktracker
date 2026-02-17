@@ -42,7 +42,14 @@ values
   ('PurePeps', 'purepeps', 'https://purepeps.com/'),
   ('HK Roids', 'hk-roids', 'https://hkroids.com/'),
   ('Reta Peptide', 'reta-peptide', 'https://reta-peptide.com/'),
-  ('Swiss Chems', 'swiss-chems', 'https://swisschems.is/')
+  ('Swiss Chems', 'swiss-chems', 'https://swisschems.is/'),
+  ('The Peptide Haven', 'the-peptide-haven', 'https://thepeptidehaven.com/'),
+  ('Injectify US', 'injectify-us', 'https://us.injectify.is/'),
+  ('Pure Peptide Labs', 'pure-peptide-labs', 'https://purepeptidelabs.shop/'),
+  ('Alpha G Research', 'alpha-g-research', 'https://www.alphagresearch.com/'),
+  ('Kits4Less', 'kits4less', 'https://kits4less.com/'),
+  ('Top Peptides', 'top-peptides', 'https://www.toppeptides.com/'),
+  ('Dragon Pharma Store', 'dragon-pharma-store', 'https://dragonpharmastore.com/')
 on conflict (slug) do update
 set
   name = excluded.name,
@@ -89,7 +96,14 @@ with desired_vendor_pages as (
       ('purepeps', 'https://purepeps.com/', 'catalog'),
       ('hk-roids', 'https://hkroids.com/', 'catalog'),
       ('reta-peptide', 'https://reta-peptide.com/', 'catalog'),
-      ('swiss-chems', 'https://swisschems.is/', 'catalog')
+      ('swiss-chems', 'https://swisschems.is/', 'catalog'),
+      ('the-peptide-haven', 'https://thepeptidehaven.com/', 'catalog'),
+      ('injectify-us', 'https://us.injectify.is/', 'catalog'),
+      ('pure-peptide-labs', 'https://purepeptidelabs.shop/', 'catalog'),
+      ('alpha-g-research', 'https://www.alphagresearch.com/', 'catalog'),
+      ('kits4less', 'https://kits4less.com/', 'catalog'),
+      ('top-peptides', 'https://www.toppeptides.com/', 'catalog'),
+      ('dragon-pharma-store', 'https://dragonpharmastore.com/', 'catalog')
   ) as t(vendor_slug, url, page_type)
 )
 insert into vendor_pages (vendor_id, url, page_type)
