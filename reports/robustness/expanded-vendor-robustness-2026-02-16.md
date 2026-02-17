@@ -1,5 +1,80 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
+## Continuation Snapshot (2026-02-17, smoke-fix rerun + queue closure)
+### Smoke regression remediation (`thymosin-alpha-1 24 -> 0`)
+- Root cause identified:
+  - Smoke comparator used only current top-`N` coverage snapshot.
+  - Baseline-tracked `thymosin-alpha-1` fell outside current top-`N` rank and was interpreted as missing (`0`) despite active coverage.
+- Deterministic fix shipped:
+  - Added baseline-slug hydration helpers in `lib/scraping/quality-guardrails.ts`:
+    - `getMissingSmokeCoverageSlugs`
+    - `mergeCoverageSnapshots`
+  - Vendor guardrail flow now fetches current coverage for baseline-tracked compounds missing from current top snapshot before smoke evaluation.
+  - Standalone smoke script (`scripts/run-top-compounds-smoke-test.ts`) now uses the same hydration logic.
+  - Regression tests added in `tests/unit/quality-guardrails.test.ts`.
+- Validation:
+  - Current live coverage for `thymosin-alpha-1`: `27` vendors / `27` active offers.
+  - Vendor run `425efba4-127e-4792-903d-8113bf45c206` smoke status: `pass` (`failures=[]`).
+
+### Manual alias adjudication closure
+- Manually ignored all 14 open `ai_review_cached` alias items (strict peptide scope):
+  - Amplify Peptides: `SYN-31 10mg`, `HN-24 10mg`, `SNP-8 10mg`, `PNL-3 20mg`
+  - Amino Asylum: `T2 200MCG/ML`, `Prami`, `Adex`, `Stampede`, `PYRO 7MG`, `Helios`, `GAC EXTREME`
+  - Crush Research: `Triple Agonist 15mg : Single`
+  - Peptides World: `P-21-10Mg`, `Adipotide-FTPP 10mg`
+- Verification run:
+  - `npm run job:review-ai -- --limit=50` -> `itemsScanned=0`, `leftOpen=0`.
+- Queue state after closure:
+  - `alias_match`: `open=0`, `resolved=466`, `ignored=432`.
+
+### Parse-failure queue triage hardening
+- Open parse-failure audit:
+  - `open=33` at start of pass (`invalid_pricing_payload=6`, `no_offers_found=24`, `safe_mode_cloudflare_blocked=3`).
+- Metadata hygiene:
+  - Two legacy open cloudflare-block rows were missing provider/status/source fields.
+  - Backfilled those rows from stored error text; open cloudflare-block entries now metadata-complete (`3/3`).
+- Post-rerun parse-failure queue:
+  - `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`).
+
+### Robustness cycle (this pass)
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`74` tests)
+- `npm run job:vendors`:
+  - run `425efba4-127e-4792-903d-8113bf45c206`
+  - status `partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`)
+- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline run `425efba4-127e-4792-903d-8113bf45c206`)
+
+### Failed-page profile in run `425efba4-127e-4792-903d-8113bf45c206`
+- `INVALID_PRICING_PAYLOAD`: `https://peptiatlas.com/` (expected).
+- `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`no_offers_found` payload reason) on:
+  - `https://aminoasylumllc.com/`
+  - `https://amplifypeptides.com/`
+  - `https://atomiklabz.com/`
+  - `https://biolongevitylabs.com/`
+  - `https://www.biopepz.net/`
+  - `https://coastalpeptides.com/`
+  - `https://crushresearch.com/`
+  - `https://dragonpharmastore.com/64-peptides`
+  - `https://elitepeptides.com/`
+  - `https://erospeptides.com/`
+  - `https://hkroids.com/`
+  - `https://kits4less.com/`
+  - `https://peptidesworld.com/`
+  - `https://purapeptides.com/`
+  - `https://purepeptidelabs.shop/`
+  - `https://purepeps.com/`
+  - `https://purerawz.co/`
+  - `https://simplepeptide.com/`
+  - `https://thepeptidehaven.com/`
+  - `https://trustedpeptide.net/`
+
 ## Continuation Snapshot (2026-02-17, post-onboarding run)
 ### Newly onboarded vendors (this pass)
 - Added to seed/onboarded:

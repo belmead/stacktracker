@@ -5,15 +5,43 @@
 - Project path: `/Users/belmead/Documents/stacktracker`
 - Environment: host DNS/network healthy; restricted Codex sandboxes can still produce false `ENOTFOUND` for networked jobs.
 - App status: app/typecheck/lint/tests are operational; vendor ingestion now includes provider-aware safe-mode access-block classification and single-unit offer exclusions.
-- Most recent vendor run: `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`status=failed`, `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`, `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`, `offersExcludedByRule=427`, `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`, guardrails `invariant=pass`, `drift=pass`, `smoke=fail`).
-- Most recent passing guardrail baseline run: `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`).
+- Most recent vendor run: `425efba4-127e-4792-903d-8113bf45c206` (`status=partial`, `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`, `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`, `offersExcludedByRule=325`, `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`).
+- Most recent smoke baseline run: `425efba4-127e-4792-903d-8113bf45c206` (`job:smoke-top-compounds` `failureCount=0`).
+- Prior smoke-regression run (historical): `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`smoke=fail`, `thymosin-alpha-1` `24 -> 0` false drop due comparator bug).
 - Most recent pre-remediation full run (historical): `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`, `pagesSuccess=41`, `pagesFailed=4`).
 - Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
-- Alias triage queue (`queue_type='alias_match'`): `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`.
-- Parse-failure queue (`queue_type='parse_failure'`): `open=33`.
+- Alias triage queue (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`.
+- Parse-failure queue (`queue_type='parse_failure'`): `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`).
 - Current seeded coverage: `45` active vendors / `53` active vendor pages.
-- Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:review-ai -- --limit=200` (latest vendor job failed smoke guardrail, not execution/runtime failure).
+- Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`.
 - Operational note: continue deferring additional `job:finnrick` runs unless explicitly requested.
+
+## Continuation Update (2026-02-17, smoke-fix rerun + queue closure)
+- Manual alias adjudication completed:
+  - Ignored all 14 open `ai_review_cached` aliases (strict peptide scope preserved).
+  - Verification: `npm run job:review-ai -- --limit=50` -> `itemsScanned=0`, alias queue remains closed (`open=0`).
+- Smoke regression (`thymosin-alpha-1 24 -> 0`) root cause + fix:
+  - Root cause: smoke comparator evaluated against current top-`N` snapshot only; baseline-tracked compounds falling outside current top-`N` were interpreted as `0`.
+  - Fix shipped in both vendor guardrails and standalone smoke script:
+    - added `getMissingSmokeCoverageSlugs` and `mergeCoverageSnapshots` in `lib/scraping/quality-guardrails.ts`;
+    - hydrated current coverage for baseline-tracked missing slugs before smoke evaluation.
+  - Regression coverage added in `tests/unit/quality-guardrails.test.ts`.
+  - Validation: live `thymosin-alpha-1` coverage is `27` vendors / `27` active offers; latest vendor run smoke status is `pass`.
+- Parse-failure queue hardening:
+  - Audited open parse-failure reasons: `invalid_pricing_payload=6`, `no_offers_found=24`, `safe_mode_cloudflare_blocked=3` at start of pass.
+  - Backfilled two legacy open cloudflare-block rows missing provider/status/source fields; open cloudflare-block rows now metadata-complete (`3/3`).
+- Robustness cycle results:
+  - `npm run typecheck` -> pass
+  - `npm run lint` -> pass
+  - `npm run test` -> pass (`74` tests)
+  - `npm run job:vendors` -> `425efba4-127e-4792-903d-8113bf45c206` (`status=partial`, guardrails all pass, `pagesFailed=21`)
+  - `npm run job:review-ai -- --limit=50` -> pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` -> pass (`failureCount=0`, baseline `425efba4-127e-4792-903d-8113bf45c206`)
+- Security track kickoff:
+  - Added production-security hardening baseline requirements in `README.md` and `PRD.md` (secret hygiene, least-privilege DB creds, CI secret scanning/CVE gating, MFA/audit controls).
+- Notable open regression cluster from latest vendor run:
+  - 20 storefront roots now emit `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` with reason `no_offers_found` (in addition to expected `PeptiAtlas INVALID_PRICING_PAYLOAD`).
+  - Priority next step: isolate why these roots returned empty in this pass (target drift vs extraction/source regression) while many high-volume vendors still succeeded.
 
 ## Continuation Update (2026-02-17, onboarding batch 4 + smoke regression)
 - New vendor onboarding decisions applied in seed data:

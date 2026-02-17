@@ -89,6 +89,9 @@ All notable changes to Stack Tracker are documented in this file.
   - `tests/unit/worker-no-offers.test.ts` now also validates provider-aware safe-mode access-block classification (`safe_mode_access_blocked` plus Cloudflare compatibility) and pre-aggregation single-unit exclusion behavior.
 - Peptide page regression tests:
   - `tests/unit/peptide-page.test.ts` validates selected-variant average/low/high price summary rendering.
+- Smoke-coverage hydration helpers and regression tests:
+  - `getMissingSmokeCoverageSlugs` + `mergeCoverageSnapshots` in `lib/scraping/quality-guardrails.ts`.
+  - `tests/unit/quality-guardrails.test.ts` coverage for baseline-tracked slug hydration/merge behavior.
 
 ### Changed
 - MVP single-unit scope enforcement is now active at ingestion:
@@ -244,6 +247,9 @@ All notable changes to Stack Tracker are documented in this file.
 - Peptide detail pages now show selected-variant pricing summary:
   - `Average price of <size> <formulation> of <compound>`
   - `Low` / `High` for the same selected variant.
+- Top-compound smoke evaluation now hydrates missing baseline slugs:
+  - Vendor guardrail evaluation and standalone smoke script now fetch current coverage for baseline-tracked compounds that fall outside current top-`N` ranking before computing smoke drops.
+  - Prevents false zero-coverage failures when ranking churn drops a still-covered compound out of the current top snapshot (for example `thymosin-alpha-1` in run `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`).
 
 ### Verified
 - Latest vendor onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) completed ingestion and then failed guardrails with:
@@ -254,13 +260,23 @@ All notable changes to Stack Tracker are documented in this file.
   - guardrails `invariant=pass`, `drift=pass`, `smoke=fail`
   - smoke fail detail: `thymosin-alpha-1` vendor coverage `24` -> `0` (`required=16`)
 - Latest passing guardrail baseline run remains `973e56fa-dd68-4a26-b674-c54cebad5b19` (`invariant=pass`, `drift=pass`, `smoke=pass`).
+- Post-fix robustness run (`425efba4-127e-4792-903d-8113bf45c206`) completed with:
+  - `status=partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails `invariant=pass`, `drift=pass`, `smoke=pass`
+- Latest smoke command verification (`npm run job:smoke-top-compounds`) passes with baseline `425efba4-127e-4792-903d-8113bf45c206` (`failureCount=0`).
 - Latest coverage snapshot:
   - `45` active vendors
   - `53` active vendor pages
-- Alias queue snapshot after onboarding run:
-  - `queue_type='alias_match'`: `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`
-- Parse-failure queue remains separate:
-  - `queue_type='parse_failure'`: `open=33`
+- Alias queue snapshot after manual adjudication and verification:
+  - `queue_type='alias_match'`: `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
+- Parse-failure queue snapshot after latest run:
+  - `queue_type='parse_failure'`: `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
+- Parse-failure payload hygiene audit:
+  - Backfilled two legacy open cloudflare-block rows so blocked-site metadata is now complete on all open cloudflare-block entries (`3/3` include provider/status/source).
 - Latest run failing-page signals are explicit:
   - `Kits4Less` root page -> `NO_OFFERS` with `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403` challenge)
   - `PeptiAtlas` root page -> `INVALID_PRICING_PAYLOAD` (Woo products with all-zero prices)

@@ -3,6 +3,7 @@ import {
   createReviewQueueItem,
   createScrapeRun,
   finishScrapeRun,
+  getCompoundCoverageBySlugs,
   getCompoundFormulationCoverageSnapshot,
   getRecentVendorRunSummaries,
   getTopCompoundCoverageSnapshot,
@@ -33,6 +34,8 @@ import {
   evaluateFormulationDrift,
   evaluateFormulationInvariant,
   evaluateTopCompoundCoverageSmoke,
+  getMissingSmokeCoverageSlugs,
+  mergeCoverageSnapshots,
   parseInvariantResultFromSummary,
   parseTopCompoundCoverageSnapshotFromSummary,
   type FormulationDriftResult,
@@ -609,9 +612,39 @@ async function evaluateQualityGuardrails(input: {
     previous: previousInvariant
   });
 
+  let smokeCurrentCoverage = normalizedTopCoverage;
+  if (previousTopCoverage) {
+    const missingCoverageSlugs = getMissingSmokeCoverageSlugs({
+      current: smokeCurrentCoverage,
+      previous: previousTopCoverage,
+      minBaselineVendorCount: smokeConfig.minBaselineVendorCount
+    });
+
+    if (missingCoverageSlugs.length > 0) {
+      const supplementalRows = await withDbTiming(input.summary, () =>
+        getCompoundCoverageBySlugs({
+          compoundSlugs: missingCoverageSlugs
+        })
+      );
+      const supplementalCoverage: TopCompoundCoverageSnapshot[] = supplementalRows.map((row) => ({
+        compoundSlug: row.compoundSlug,
+        compoundName: row.compoundName,
+        vendorCount: row.vendorCount,
+        offerCount: row.offerCount
+      }));
+
+      // Missing baseline compounds can fall outside the current top-N snapshot.
+      // Hydrate their current coverage so smoke checks compare real counts (not implicit zero).
+      smokeCurrentCoverage = mergeCoverageSnapshots({
+        primary: smokeCurrentCoverage,
+        supplemental: supplementalCoverage
+      });
+    }
+  }
+
   const smokeCoverage = evaluateTopCompoundCoverageSmoke({
     config: smokeConfig,
-    current: normalizedTopCoverage,
+    current: smokeCurrentCoverage,
     previous: previousTopCoverage
   });
 

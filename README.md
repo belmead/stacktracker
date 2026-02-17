@@ -12,20 +12,25 @@ Primary docs:
   - Active vendors: `45`
   - Active vendor pages: `53`
 - Latest vendor run:
-  - Run ID: `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`
-  - Status: `failed` (guardrail failure after ingestion)
-  - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
-  - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
-  - `offersExcludedByRule=427`
-  - `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`
-  - quality guardrails: invariant `pass`, drift `pass`, smoke `fail`
-  - smoke failure detail: `thymosin-alpha-1` dropped from `24` vendors in baseline to `0` current (`required=16`, `dropPct=1`)
-- Latest passing guardrail baseline:
-  - `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, guardrails invariant/drift/smoke all `pass`)
+  - Run ID: `425efba4-127e-4792-903d-8113bf45c206`
+  - Status: `partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails: invariant `pass`, drift `pass`, smoke `pass`
+- Smoke regression remediation (`thymosin-alpha-1 24 -> 0`) shipped:
+  - Root cause: smoke comparator used current top-`N` snapshot only, so a baseline-tracked slug falling just outside current top-`N` was treated as `0`.
+  - Fix: hydrate current coverage for any baseline-tracked compounds missing from current top-`N` before smoke evaluation (vendor worker + standalone smoke script).
+  - Regression coverage: `tests/unit/quality-guardrails.test.ts` now validates missing-baseline-slug hydration helpers.
+- Current `thymosin-alpha-1` coverage:
+  - `27` active vendors / `27` active offers.
+- Latest smoke baseline run:
+  - `425efba4-127e-4792-903d-8113bf45c206` (`job:smoke-top-compounds` now passes against this baseline).
 - Alias queue (`queue_type='alias_match'`):
-  - `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`
+  - `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
 - Parse-failure queue (`queue_type='parse_failure'`):
-  - `open=33`
+  - `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
 - Newly onboarded vendors in this pass:
   - `precisionpeptideco.com`
   - `aminoasylumllc.com`
@@ -36,8 +41,10 @@ Primary docs:
   - `trustedpeptide.net`
   - `crushresearch.com`
 - Current failing-page diagnostics in the latest run:
-  - `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403` challenge).
+  - `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (currently observed without provider marker in this run; queue still records cloudflare-block reason on dedicated entries).
   - `PeptiAtlas` (`https://peptiatlas.com/`) -> `INVALID_PRICING_PAYLOAD` (Woo candidates found, all observed price fields are zero).
+- Additional no-offers regressions in latest run:
+  - `Amino Asylum`, `Amplify Peptides`, `Atomik Labz`, `BioLongevity Labs`, `BioPepz`, `Coastal Peptides`, `Crush Research`, `Dragon Pharma Store`, `Elite Peptides`, `Eros Peptides`, `HK Roids`, `Peptides World`, `Pura Peptides`, `Pure Peptide Labs`, `PurePeps`, `PureRawz`, `Simple Peptide`, `The Peptide Haven`, `Trusted Peptide`.
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
   - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.
@@ -204,6 +211,35 @@ npm run job:exclusion-audit
 npm run job:exclusion-enforce
 npm run job:smoke-top-compounds
 ```
+
+## Production security hardening (initial plan)
+
+Before production launch, enforce all of the following:
+
+1. Secret management and rotation
+   - Store all secrets only in platform secret stores (`Vercel` env + DB secret manager), never in repo/history.
+   - Rotate `ADMIN_AUTH_SECRET`, `CRON_SECRET`, API keys (`OPENAI`, `RESEND`, optional `FIRECRAWL`) before go-live and on a recurring schedule.
+2. Least-privilege database access
+   - Use a dedicated runtime DB role with only required DML permissions for app/jobs.
+   - Keep migration/bootstrap permissions out of runtime env credentials.
+3. Log/event redaction policy
+   - Treat all logs/events as potentially public to operators.
+   - Do not write secrets/tokens/cookies to logs or review-queue payloads; add automated checks in CI.
+4. Endpoint and admin hardening
+   - Restrict internal cron endpoints to `Authorization: Bearer $CRON_SECRET`.
+   - Keep admin session TTL conservative and enforce secure, httpOnly, sameSite cookies in production.
+5. Supply-chain and dependency controls
+   - Enable automated dependency vulnerability scanning and weekly update cadence.
+   - Block production deploy on critical/high CVEs until triaged.
+6. CI guardrails for secret leakage
+   - Add secret scanning in CI (e.g., gitleaks/trufflehog) across full git history and PR diffs.
+   - Fail CI on detected candidate secrets.
+7. Operational access controls
+   - Enforce SSO + MFA on deployment/platform accounts (Vercel, Supabase, email provider).
+   - Maintain audit logs for env-var changes, deploys, and admin actions.
+
+Status in this pass:
+- Parse-failure queue legacy cloudflare-block payloads were backfilled so open blocked-site entries now have complete provider/status/source metadata (`3/3` complete).
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 Use `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled slices instead of scanning the full queue.

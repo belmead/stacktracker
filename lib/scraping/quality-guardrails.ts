@@ -277,6 +277,50 @@ export function evaluateTopCompoundCoverageSmoke(input: {
   };
 }
 
+export function getMissingSmokeCoverageSlugs(input: {
+  current: TopCompoundCoverageSnapshot[];
+  previous: TopCompoundCoverageSnapshot[] | null;
+  minBaselineVendorCount: number;
+}): string[] {
+  if (!input.previous || input.previous.length === 0) {
+    return [];
+  }
+
+  const currentSlugs = new Set(input.current.map((item) => item.compoundSlug));
+  const missing: string[] = [];
+
+  for (const previousItem of input.previous) {
+    if (previousItem.vendorCount < input.minBaselineVendorCount) {
+      continue;
+    }
+
+    if (!currentSlugs.has(previousItem.compoundSlug)) {
+      missing.push(previousItem.compoundSlug);
+    }
+  }
+
+  return missing;
+}
+
+export function mergeCoverageSnapshots(input: {
+  primary: TopCompoundCoverageSnapshot[];
+  supplemental: TopCompoundCoverageSnapshot[];
+}): TopCompoundCoverageSnapshot[] {
+  const merged = new Map<string, TopCompoundCoverageSnapshot>();
+
+  for (const item of input.primary) {
+    merged.set(item.compoundSlug, item);
+  }
+
+  for (const item of input.supplemental) {
+    if (!merged.has(item.compoundSlug)) {
+      merged.set(item.compoundSlug, item);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
 export function parseInvariantResultFromSummary(input: { summary: unknown; id: string }): FormulationInvariantResult | null {
   const summaryObj = asObject(input.summary);
   const quality = asObject(summaryObj?.qualityGuardrails);
@@ -364,4 +408,3 @@ export function parseTopCompoundCoverageSnapshotFromSummary(summary: unknown): T
 
   return parsed.length > 0 ? parsed : null;
 }
-

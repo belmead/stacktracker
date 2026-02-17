@@ -1422,6 +1422,29 @@ export async function getTopCompoundCoverageSnapshot(input: {
   `;
 }
 
+export async function getCompoundCoverageBySlugs(input: {
+  compoundSlugs: string[];
+}): Promise<TopCompoundCoverageSnapshotRow[]> {
+  const compoundSlugs = Array.from(new Set(input.compoundSlugs.map((slug) => slug.trim()).filter(Boolean)));
+  if (compoundSlugs.length === 0) {
+    return [];
+  }
+
+  return sql<TopCompoundCoverageSnapshotRow[]>`
+    select
+      c.slug as compound_slug,
+      c.name as compound_name,
+      count(distinct oc.vendor_id)::int as vendor_count,
+      count(oc.id)::int as offer_count
+    from compounds c
+    left join compound_variants cv on cv.compound_id = c.id and cv.is_active = true
+    left join offers_current oc on oc.variant_id = cv.id and oc.is_available = true
+    where c.is_active = true and c.slug = any(${sql.array(compoundSlugs)}::text[])
+    group by c.id, c.slug, c.name
+    order by c.slug asc
+  `;
+}
+
 export interface RecentVendorRunSummary {
   id: string;
   status: ScrapeStatus;

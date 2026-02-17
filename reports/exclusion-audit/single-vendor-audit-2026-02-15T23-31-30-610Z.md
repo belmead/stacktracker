@@ -1,5 +1,7 @@
 # Single-vendor Exclusion Audit
 
+Review note (2026-02-17): historical audit snapshot retained as-is.
+
 Generated: 2026-02-15T23:31:30.609Z
 
 This is a report-only audit. No exclusions were automatically applied.
@@ -232,4 +234,3 @@ Every candidate remains tracked until a manual decision is recorded.
 - Manual decision: `pending`
 - Offers:
   - GLP-1 TZ (10MG) ($90.00) - https://nexgenpeptides.shop/product/ng-tz-10/
-

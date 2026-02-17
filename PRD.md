@@ -188,6 +188,16 @@ Internal jobs:
 - Enforce one primary category per compound at the DB level.
 - SEO support via sitemap + robots routes.
 - Structured scrape event logging and run summaries.
+- Production secret hygiene:
+  - No secrets/API keys in source control, logs, or event payloads.
+  - Runtime secrets are managed only via deployment platform secret stores.
+  - Secrets are rotatable without code changes.
+- Least-privilege infrastructure:
+  - Runtime DB credentials are separate from migration/bootstrap credentials.
+  - Internal job endpoints require shared-secret auth and are not publicly callable without token.
+- Security operations baseline:
+  - CI secret scanning and dependency vulnerability scanning are required before production go-live.
+  - Platform/operator accounts (deployment, DB, email provider) require MFA and auditable change logs.
 
 ## 9. Operational Defaults
 - Currency: USD.
@@ -244,17 +254,24 @@ Internal jobs:
   - run-over-run formulation drift alerting
   - top-compound vendor-coverage smoke checks
 - Top-compound smoke script is available via `npm run job:smoke-top-compounds` and exits non-zero when tracked coverage drops below configured thresholds.
-- Latest passing guardrail baseline run (`973e56fa-dd68-4a26-b674-c54cebad5b19`) is passing (`invariant=pass`, `drift=pass`, `smoke=pass`).
-- Latest onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) ingested `151` new offers but failed smoke guardrail (`thymosin-alpha-1` coverage `24` -> `0`).
-- Latest robustness cycle after scope enforcement:
+- Smoke comparator regression fix shipped (`2026-02-17`):
+  - root cause: baseline-tracked compound slugs could fall outside current top-`N` snapshot and be interpreted as zero coverage;
+  - remediation: hydrate current coverage for baseline-tracked missing slugs before smoke evaluation in both `job:vendors` and `job:smoke-top-compounds`.
+- Latest robustness cycle:
   - `npm run typecheck` pass
   - `npm run lint` pass
-  - `npm run test` pass (`71` tests)
-  - `npm run job:vendors` pass on rerun (`973e56fa-dd68-4a26-b674-c54cebad5b19`, `pagesSuccess=43`, `pagesFailed=2`, `offersExcludedByRule=320`)
-  - `npm run job:vendors` onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) failed on smoke guardrail after ingestion (`pagesSuccess=51`, `pagesFailed=2`, `offersCreated=151`, `unresolvedAliases=14`)
-  - `npm run job:review-ai -- --limit=200` pass (`itemsScanned=14`, `resolved=0`, `ignored=0`, `leftOpen=14`)
-  - `npm run job:smoke-top-compounds` was passing on baseline `973e56fa-dd68-4a26-b674-c54cebad5b19` before onboarding pass 4; onboarding run now fails the equivalent smoke guardrail in-run.
-- Strict normalized `bpc-157` `10mg` vial coverage currently includes `20` active offers (including Elite `BPC-157 10mg`).
+  - `npm run test` pass (`74` tests)
+  - `npm run job:vendors` run `425efba4-127e-4792-903d-8113bf45c206` completed (`status=partial`) with guardrails `invariant=pass`, `drift=pass`, `smoke=pass`.
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`, `leftOpen=0`).
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `425efba4-127e-4792-903d-8113bf45c206`).
+- Current queue and coverage snapshot:
+  - Alias queue (`queue_type='alias_match'`): `open=0`, `resolved=466`, `ignored=432`.
+  - Parse-failure queue (`queue_type='parse_failure'`): `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`).
+  - Active coverage: `45` vendors / `53` vendor pages.
+- Current `thymosin-alpha-1` coverage: `27` active vendors (`27` active offers), validating that the prior `24 -> 0` smoke output was comparator drift rather than ingestion loss.
+- Latest vendor run page-failure profile:
+  - `21` failed pages, primarily `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` on vendor root targets (`no_offers_found`);
+  - `PeptiAtlas` continues expected `INVALID_PRICING_PAYLOAD`.
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
 - Coverage expansion batches are onboarded in seed data:

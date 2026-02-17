@@ -1,8 +1,10 @@
 import { sql } from "@/lib/db/client";
-import { getRecentVendorRunSummaries, getTopCompoundCoverageSnapshot } from "@/lib/db/queries";
+import { getCompoundCoverageBySlugs, getRecentVendorRunSummaries, getTopCompoundCoverageSnapshot } from "@/lib/db/queries";
 import { env } from "@/lib/env";
 import {
   evaluateTopCompoundCoverageSmoke,
+  getMissingSmokeCoverageSlugs,
+  mergeCoverageSnapshots,
   parseTopCompoundCoverageSnapshotFromSummary,
   type TopCompoundCoverageSnapshot
 } from "@/lib/scraping/quality-guardrails";
@@ -33,12 +35,34 @@ async function main(): Promise<void> {
     }
   }
 
+  let smokeCurrentCoverage = current;
+  const missingCoverageSlugs = getMissingSmokeCoverageSlugs({
+    current: smokeCurrentCoverage,
+    previous: baseline,
+    minBaselineVendorCount: env.TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS
+  });
+  if (missingCoverageSlugs.length > 0) {
+    const supplementalRows = await getCompoundCoverageBySlugs({
+      compoundSlugs: missingCoverageSlugs
+    });
+    const supplementalCoverage: TopCompoundCoverageSnapshot[] = supplementalRows.map((row) => ({
+      compoundSlug: row.compoundSlug,
+      compoundName: row.compoundName,
+      vendorCount: row.vendorCount,
+      offerCount: row.offerCount
+    }));
+    smokeCurrentCoverage = mergeCoverageSnapshots({
+      primary: smokeCurrentCoverage,
+      supplemental: supplementalCoverage
+    });
+  }
+
   const result = evaluateTopCompoundCoverageSmoke({
     config: {
       maxVendorDropPct: env.TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT,
       minBaselineVendorCount: env.TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS
     },
-    current,
+    current: smokeCurrentCoverage,
     previous: baseline
   });
 
@@ -80,4 +104,3 @@ main()
     await shutdown();
     process.exit(1);
   });
-

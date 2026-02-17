@@ -4,6 +4,8 @@ import {
   evaluateFormulationDrift,
   evaluateFormulationInvariant,
   evaluateTopCompoundCoverageSmoke,
+  getMissingSmokeCoverageSlugs,
+  mergeCoverageSnapshots,
   parseInvariantResultFromSummary,
   parseTopCompoundCoverageSnapshotFromSummary
 } from "@/lib/scraping/quality-guardrails";
@@ -151,6 +153,69 @@ describe("quality guardrails", () => {
     expect(result.failures).toHaveLength(0);
   });
 
+  it("identifies baseline-tracked compounds missing from current snapshot", () => {
+    const missing = getMissingSmokeCoverageSlugs({
+      minBaselineVendorCount: 4,
+      previous: [
+        {
+          compoundSlug: "thymosin-alpha-1",
+          compoundName: "THYMOSIN ALPHA-1",
+          vendorCount: 24,
+          offerCount: 24
+        },
+        {
+          compoundSlug: "small-sample",
+          compoundName: "Small Sample",
+          vendorCount: 2,
+          offerCount: 2
+        }
+      ],
+      current: [
+        {
+          compoundSlug: "bpc-157",
+          compoundName: "BPC-157",
+          vendorCount: 30,
+          offerCount: 50
+        }
+      ]
+    });
+
+    expect(missing).toEqual(["thymosin-alpha-1"]);
+  });
+
+  it("merges supplemental coverage rows without overwriting primary snapshot rows", () => {
+    const merged = mergeCoverageSnapshots({
+      primary: [
+        {
+          compoundSlug: "bpc-157",
+          compoundName: "BPC-157",
+          vendorCount: 30,
+          offerCount: 50
+        }
+      ],
+      supplemental: [
+        {
+          compoundSlug: "bpc-157",
+          compoundName: "BPC-157",
+          vendorCount: 1,
+          offerCount: 1
+        },
+        {
+          compoundSlug: "thymosin-alpha-1",
+          compoundName: "THYMOSIN ALPHA-1",
+          vendorCount: 27,
+          offerCount: 27
+        }
+      ]
+    });
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]?.compoundSlug).toBe("bpc-157");
+    expect(merged[0]?.vendorCount).toBe(30);
+    expect(merged[1]?.compoundSlug).toBe("thymosin-alpha-1");
+    expect(merged[1]?.vendorCount).toBe(27);
+  });
+
   it("parses invariant and top-compound snapshots from run summary", () => {
     const summary = {
       qualityGuardrails: {
@@ -189,4 +254,3 @@ describe("quality guardrails", () => {
     expect(topCoverage?.[0]?.compoundSlug).toBe("bpc-157");
   });
 });
-
