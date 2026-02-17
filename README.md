@@ -9,28 +9,44 @@ Primary docs:
 ## Latest Status (2026-02-17)
 
 - Coverage:
-  - Active vendors: `37`
-  - Active vendor pages: `45`
-- Latest full vendor run:
-  - Run ID: `96ade0dc-cd5d-47aa-859d-064fe416eec6`
-  - Status: `partial`
-  - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
-  - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
-  - `unresolvedAliases=0`, `aliasesSkippedByAi=774`
-  - quality guardrails: invariant `pass`, drift `pass`, smoke `pass`
+  - Active vendors: `45`
+  - Active vendor pages: `53`
+- Latest vendor run:
+  - Run ID: `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`
+  - Status: `failed` (guardrail failure after ingestion)
+  - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
+  - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
+  - `offersExcludedByRule=427`
+  - `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`
+  - quality guardrails: invariant `pass`, drift `pass`, smoke `fail`
+  - smoke failure detail: `thymosin-alpha-1` dropped from `24` vendors in baseline to `0` current (`required=16`, `dropPct=1`)
+- Latest passing guardrail baseline:
+  - `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, guardrails invariant/drift/smoke all `pass`)
 - Alias queue (`queue_type='alias_match'`):
-  - `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
+  - `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`
+- Parse-failure queue (`queue_type='parse_failure'`):
+  - `open=33`
+- Newly onboarded vendors in this pass:
+  - `precisionpeptideco.com`
+  - `aminoasylumllc.com`
+  - `elitepeptides.com`
+  - `peptidesworld.com`
+  - `amplifypeptides.com`
+  - `peptidesupplyco.org`
+  - `trustedpeptide.net`
+  - `crushresearch.com`
 - Current failing-page diagnostics in the latest run:
-  - `Alpha G Research` (`https://www.alphagresearch.com/`) -> `NO_OFFERS` (root target is not the right storefront page; `shop-1` does expose products).
-  - `Dragon Pharma Store` (`https://dragonpharmastore.com/`) -> `NO_OFFERS` (site has products; current extractor misses this PrestaShop layout from root target).
-  - `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`HTTP 403` Cloudflare).
+  - `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403` challenge).
   - `PeptiAtlas` (`https://peptiatlas.com/`) -> `INVALID_PRICING_PAYLOAD` (Woo candidates found, all observed price fields are zero).
+- Storefront-target remediations completed:
+  - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
+  - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.
 - Pricing parsing fix validated:
   - Woo discovery now prefers storefront sale price from `price_html` when API numeric fields are stale.
   - Example: Eros `S 20MG` now persists as `$95.99` (`9599` cents) instead of stale `$119.99`.
 - Current product-scope note:
-  - Bulk/pack listings are still ingested today.
-  - Planned next step is to enforce MVP scope to single-unit/single-vial offers only and defer bulk handling to v2.
+  - MVP scope enforcement is active: bulk/pack/kit/multi-vial offers are excluded during ingestion before public aggregation.
+  - Bulk-pack economics remain deferred to v2.
 
 ## What is implemented
 
@@ -58,6 +74,12 @@ Primary docs:
   - HTML discovery now falls back to vendor root URL when a seeded page target returns empty HTML (for example `eliteresearchusa.com/products`).
   - Discovery and HTML fetch calls now use transient retry/backoff guards to reduce `ECONNRESET`/timeout flakiness.
   - Woo discovery now emits explicit invalid-pricing diagnostics when product candidates exist but all observed prices are zero/empty (`INVALID_PRICING_PAYLOAD`).
+  - Safe-mode access blocks now emit provider-aware classification context (`safe_mode_access_blocked`) with Cloudflare-specific compatibility tagging (`safe_mode_cloudflare_blocked`) in no-offers/discovery-failure events.
+  - PrestaShop-style product tiles are now supported in HTML extraction (for example `li.ajax_block_product`, `.product-container`, `.product-miniature`).
+  - Seeded storefront targeting now uses parseable paths for known root-gap vendors:
+    - `https://www.alphagresearch.com/shop-1`
+    - `https://dragonpharmastore.com/64-peptides`
+  - Deterministic single-unit offer policy now excludes bulk/pack/kit/multi-vial listings before alias and variant persistence.
   - Formulation inference now defaults mass-unit peptide listings like `BPC-157 10mg` to `vial` when no non-vial form is indicated.
   - Offer upsert logic now reconciles by `(vendor_id, product_url)` fallback so normalization changes (for example `other` -> `vial`) update existing rows instead of duplicating active offers.
   - Alias triage strips storefront/CTA noise and price fragments before deterministic and AI matching.
@@ -218,6 +240,8 @@ Runtime observability:
     - `aliasDeterministicMs=252041`
     - `aliasAiMs=0`
     - `dbPersistenceMs=864088`
+  - Post-single-unit-policy rerun (`973e56fa-dd68-4a26-b674-c54cebad5b19`) completed with `pagesSuccess=43`, `pagesFailed=2`, and `offersExcludedByRule=320`; guardrails passed and queue remained closed (`open=0`).
+  - Latest onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) ingested successfully (`pagesSuccess=51`, `offersCreated=151`) but failed smoke guardrail due `thymosin-alpha-1` vendor-coverage drop (`24` -> `0`) and reopened alias queue to `open=14`.
 
 Codex runtime note:
 - In restricted sandbox mode, DNS/network resolution may fail with false `ENOTFOUND` errors.
@@ -294,6 +318,16 @@ Seeded in `sql/seed.sql`:
 - `https://hkroids.com/`
 - `https://reta-peptide.com/`
 - `https://swisschems.is/`
+- `https://www.alphagresearch.com/shop-1`
+- `https://dragonpharmastore.com/64-peptides`
+- `https://precisionpeptideco.com/`
+- `https://aminoasylumllc.com/`
+- `https://elitepeptides.com/`
+- `https://peptidesworld.com/`
+- `https://amplifypeptides.com/`
+- `https://peptidesupplyco.org/`
+- `https://trustedpeptide.net/`
+- `https://crushresearch.com/`
 
 ## Testing
 
@@ -343,29 +377,33 @@ npm run test
   - Expanded coverage run (second onboarding pass): `npm run job:vendors` -> `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
   - Prior expanded coverage run (first onboarding pass): `npm run job:vendors` -> `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Latest fully successful vendor run remains `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
-  - Latest vendor-job attempts in the current hardening pass failed with transient DB write errors (`read ECONNRESET`):
+  - Historical vendor-job attempts in the earlier hardening pass failed with transient DB write errors (`read ECONNRESET`):
     - `2981b852-0b96-4c2b-9b68-57344bb8506e` (`status=failed`, reached `pagesSuccess=20`, `pagesFailed=2`, and emitted validated PeptiAtlas `INVALID_PRICING_PAYLOAD` event).
     - `4557927e-e446-4896-8278-23ff46ef9b1a` (`status=failed`, early-run `read ECONNRESET`).
     - `8d565b80-2b12-47e4-b33a-cfdb510647ef` (`status=failed`, concurrency override `1`, same `read ECONNRESET`).
+  - Post-remediation runs in this pass:
+    - `0ac9ca28-e764-4195-8511-81f8d31eb306` (`status=failed`, expected smoke baseline mismatch after single-unit scope tightening).
+    - `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, `pagesSuccess=43`, `pagesFailed=2`, `offersExcludedByRule=320`, guardrails pass).
+    - `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`status=failed`, `pagesSuccess=51`, `pagesFailed=2`, `offersCreated=151`, `offersExcludedByRule=427`, guardrails `invariant=pass`, `drift=pass`, `smoke=fail` due `thymosin-alpha-1` coverage drop).
   - Latest `npm run job:finnrick` run remains `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`) and was intentionally deferred during the current scrape-expansion pass.
-  - Current seeded coverage after expansion: `30` active vendors / `38` active vendor pages (`29` vendors with active offers).
+  - Current seeded coverage after expansion/remediation: `45` active vendors / `53` active vendor pages.
 - Latest `job:review-ai` outcomes:
   - Historical baseline full run (pre-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`.
   - First expansion-cycle triage + taxonomy onboarding (`2026-02-16`) reduced reopened queue from `open=73` to `open=0` (net `resolved +53`, `ignored +20`).
   - Second expansion-cycle triage (`2026-02-16`) reduced reopened queue from `open=16` to `open=0` (net `resolved +3`, `ignored +13`).
   - Third expansion-cycle triage (`2026-02-16`) reduced reopened queue from `open=69` to `open=0` (net `resolved +23`, `ignored +46`).
   - Stabilization-rerun triage (`2026-02-16`) processed reopened queue `open=4` -> `open=0`; AI ignored `1`, manual adjudication ignored `3` (`FAT BLASTER`, `P21 (P021)`, `Livagen`).
-  - Current queue totals (`alias_match`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=416`.
+  - Current queue totals (`alias_match`): `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`.
   - Strict normalized `bpc-157` `10mg` vial coverage is currently `20` active offers (including `http://eliteresearchusa.com/products/bpc-157?variant=97`).
-  - Top-compound smoke script (`npm run job:smoke-top-compounds`) now runs against latest baseline snapshot `8807da2b-e1d4-4ad9-93c0-15bf66999254` and currently passes (`failureCount=0`).
+  - Top-compound smoke script (`npm run job:smoke-top-compounds`) now runs against latest baseline snapshot `973e56fa-dd68-4a26-b674-c54cebad5b19` and currently passes (`failureCount=0`).
   - One bounded triage attempt encountered DB timeout (`canceling statement due to statement timeout`); subsequent bounded/full reruns completed successfully.
   - `GLP1-S`/`GLP-1 (S)`/`GLP1` are now deterministically mapped to canonical `semaglutide`.
   - `cagrisema` is kept as a tracked canonical blend compound (cagrilintide + semaglutide).
 - Expanded-run robustness report:
   - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`
-- Current remaining unstable target:
-  - `https://peptiatlas.com/` now emits explicit `INVALID_PRICING_PAYLOAD` diagnostics (validated in run `2981b852-0b96-4c2b-9b68-57344bb8506e`) instead of generic `NO_OFFERS`.
-  - Current blocker is transient DB write-path instability (`read ECONNRESET`) preventing a clean full 38-page vendor-run completion in this pass.
+- Current remaining no-offer targets:
+  - `https://kits4less.com/` is blocked by safe-mode access challenge (`safe_mode_access_blocked`, provider `cloudflare`).
+  - `https://peptiatlas.com/` emits explicit `INVALID_PRICING_PAYLOAD` diagnostics (expected for zero-priced Woo payloads).
 - AI triage root-cause fix applied:
   - OpenAI responses with long `reason` text previously failed local validation and were downgraded to `ai_unavailable_fallback`.
   - Classifier now accepts long reasons safely and truncates to 200 chars for storage, and chat fallback removed unsupported `temperature=0` for `gpt-5-mini`.

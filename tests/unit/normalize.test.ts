@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseProductName } from "@/lib/scraping/normalize";
+import { detectSingleUnitOfferExclusion, parseProductName } from "@/lib/scraping/normalize";
 
 describe("parseProductName", () => {
   it("detects vial formulation and strength", () => {
@@ -61,5 +61,35 @@ describe("parseProductName", () => {
     const parsed = parseProductName("US Finished NG-1 RT $500.00 Add to Cart Add to cart");
 
     expect(parsed.compoundRawName).toBe("NG-1 RT");
+  });
+
+  it("flags multi-vial offers outside single-unit MVP scope", () => {
+    const parsed = parseProductName("BPC-157 10mg (10 vials)");
+    const exclusion = detectSingleUnitOfferExclusion({
+      productName: "BPC-157 10mg (10 vials)",
+      parsed
+    });
+
+    expect(exclusion).toMatchObject({
+      code: "package_quantity_gt_1"
+    });
+  });
+
+  it("flags pack/kit wording outside single-unit MVP scope", () => {
+    const exclusion = detectSingleUnitOfferExclusion({
+      productName: "CJC-1295 with DAC 10mg starter kit"
+    });
+
+    expect(exclusion).toMatchObject({
+      code: "kit_keyword"
+    });
+  });
+
+  it("keeps single-vial offers in MVP scope", () => {
+    const exclusion = detectSingleUnitOfferExclusion({
+      productName: "BPC-157 10mg Vial"
+    });
+
+    expect(exclusion).toBeNull();
   });
 });

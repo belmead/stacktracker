@@ -45,7 +45,14 @@ interface WixWarmupProductLike {
 }
 
 const EXCLUDED_PATH_PATTERNS = [/\/cart\b/, /\/checkout\b/, /\/my-account\b/, /\/account\b/, /\/wishlist\b/, /\/search\b/, /\/blog\b/];
-const REQUIRED_PATH_PATTERNS = [/\/product\//, /\/products\//, /\/product-page\//, /\/product-category\//, /\/shop\/?/];
+const REQUIRED_PATH_PATTERNS = [
+  /\/product\//,
+  /\/products\//,
+  /\/product-page\//,
+  /\/product-category\//,
+  /\/shop\/?/,
+  /\/\d+-[a-z0-9-]+\.html(?:$|[?#])/i
+];
 const EXCLUDED_QUERY_KEYS = ["add-to-cart", "add_to_cart", "add-to-wishlist", "add_to_wishlist"];
 
 function isLikelyProductUrl(urlValue: string): boolean {
@@ -88,6 +95,10 @@ function cleanupText(input: string): string {
 
 function candidateSelectors(): string[] {
   return [
+    "li.ajax_block_product",
+    ".ajax_block_product",
+    ".product-container",
+    ".product-miniature",
     "article",
     "li.product",
     ".product",
@@ -103,7 +114,9 @@ function candidateSelectors(): string[] {
 function pickProductName($root: cheerio.CheerioAPI, node: AnyNode): string | null {
   const el = $root(node);
   const heading =
-    cleanupText(el.find("h1, h2, h3, h4, .product-title, .title, [data-product-title]").first().text()) ||
+    cleanupText(
+      el.find("h1, h2, h3, h4, h5, .product-title, .product-name, .title, [data-product-title]").first().text()
+    ) ||
     cleanupText(el.find("a").first().text()) ||
     cleanupText(el.text()).slice(0, 140);
 
@@ -116,11 +129,19 @@ function pickProductName($root: cheerio.CheerioAPI, node: AnyNode): string | nul
 
 function pickProductHref($root: cheerio.CheerioAPI, node: AnyNode, pageUrl: string): string | null {
   const el = $root(node);
-  const hrefCandidates = el
-    .find("a[href]")
+  const prioritizedHrefCandidates = el
+    .find("a.product-name[href], a.product_img_link[href], a[itemprop='url'][href], a.product-image[href]")
     .toArray()
     .map((anchor) => $root(anchor).attr("href"))
     .filter((href): href is string => Boolean(href));
+  const hrefCandidates = [
+    ...prioritizedHrefCandidates,
+    ...el
+      .find("a[href]")
+      .toArray()
+      .map((anchor) => $root(anchor).attr("href"))
+      .filter((href): href is string => Boolean(href))
+  ];
 
   if (el.closest("a[href]").length > 0) {
     const closestHref = el.closest("a[href]").attr("href");

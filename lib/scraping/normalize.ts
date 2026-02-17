@@ -12,7 +12,44 @@ export interface ParsedProductName {
   packageUnit: string | null;
 }
 
+export interface SingleUnitOfferExclusion {
+  code: string;
+  reason: string;
+}
+
 const MASS_STRENGTH_UNITS = new Set(["mcg", "ug", "mg", "g"]);
+const MULTI_UNIT_SCOPE_PATTERNS: Array<{ code: string; reason: string; pattern: RegExp }> = [
+  {
+    code: "bulk_keyword",
+    reason: "contains bulk keyword",
+    pattern: /\bbulk\b/i
+  },
+  {
+    code: "bundle_keyword",
+    reason: "contains bundle keyword",
+    pattern: /\bbundle\b/i
+  },
+  {
+    code: "multi_unit_keyword",
+    reason: "contains multi-unit keyword",
+    pattern: /\bmulti[\s-]?(?:vials?|packs?|kits?|capsules?|tablets?|troches?|sprays?|units?|doses?)\b/i
+  },
+  {
+    code: "pack_keyword",
+    reason: "contains pack keyword",
+    pattern: /\bpacks?\b/i
+  },
+  {
+    code: "kit_keyword",
+    reason: "contains kit keyword",
+    pattern: /\bkits?\b/i
+  },
+  {
+    code: "box_of_quantity",
+    reason: "contains box-of quantity keyword",
+    pattern: /\bbox(?:es)?\s+of\s+\d+(?:\.\d+)?\b/i
+  }
+];
 
 const FORMULATION_RULES: Array<{ code: string; label: string; patterns: RegExp[] }> = [
   { code: "vial", label: "Vial", patterns: [/\bvials?\b/, /lyophilized/, /injectable/, /for injection/] },
@@ -88,6 +125,39 @@ function parsePackageQuantity(text: string): { quantity: number | null; unit: st
     quantity: null,
     unit: null
   };
+}
+
+export function detectSingleUnitOfferExclusion(input: {
+  productName: string;
+  parsed?: ParsedProductName;
+}): SingleUnitOfferExclusion | null {
+  const normalizedProductName = normalizeWhitespace(stripStorefrontNoise(input.productName)).toLowerCase();
+  if (!normalizedProductName) {
+    return null;
+  }
+
+  const parsed = input.parsed ?? parseProductName(input.productName);
+  if (parsed.packageQuantity && parsed.packageQuantity > 1) {
+    const normalizedQuantity = Number.isInteger(parsed.packageQuantity)
+      ? String(parsed.packageQuantity)
+      : String(parsed.packageQuantity);
+    const quantityUnit = parsed.packageUnit ? `${parsed.packageUnit}${parsed.packageQuantity === 1 ? "" : "s"}` : "units";
+    return {
+      code: "package_quantity_gt_1",
+      reason: `package quantity ${normalizedQuantity} ${quantityUnit} exceeds single-unit scope`
+    };
+  }
+
+  for (const rule of MULTI_UNIT_SCOPE_PATTERNS) {
+    if (rule.pattern.test(normalizedProductName)) {
+      return {
+        code: rule.code,
+        reason: rule.reason
+      };
+    }
+  }
+
+  return null;
 }
 
 function parseStrength(text: string): { value: number | null; unit: string | null; label: string } {

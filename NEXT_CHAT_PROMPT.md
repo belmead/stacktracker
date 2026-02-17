@@ -12,56 +12,73 @@ Start by reading:
 
 Current state to assume:
 1. Coverage:
-   - active vendors: `37`
-   - active vendor pages: `45`
-2. Alias queue is clean (`queue_type='alias_match'`):
-   - `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
+   - active vendors: `45`
+   - active vendor pages: `53`
+2. Alias queue (`queue_type='alias_match'`):
+   - `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`
 3. Parse-failure queue remains separate:
-   - `queue_type='parse_failure'`: `open=27`
-4. Latest full vendor run:
-   - `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`)
-   - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
-   - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
-   - `unresolvedAliases=0`, `aliasesSkippedByAi=774`
-   - quality guardrails: invariant/drift/smoke all `pass`
-5. Latest Finnrick run:
+   - `queue_type='parse_failure'`: `open=33`
+4. Latest vendor run:
+   - `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`status=failed`)
+   - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
+   - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
+   - `offersExcludedByRule=427`
+   - `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`
+   - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=fail`
+   - smoke fail detail: `thymosin-alpha-1` vendor coverage dropped `24 -> 0` (`required=16`)
+5. Latest passing guardrail baseline run:
+   - `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, guardrails all `pass`)
+6. Latest Finnrick run:
    - `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun unless explicitly requested)
-6. Woo invalid-pricing handling is active:
-   - PeptiAtlas emits `INVALID_PRICING_PAYLOAD` with detailed diagnostics (not generic `NO_OFFERS`)
-7. Woo sale-price parsing fix is active:
-   - Eros `S 20MG` now persists as `$95.99` (`9599` cents) via `price_html` sale extraction
-8. CJC naming cleanup is active:
-   - canonical `cjc-1295-with-dac-and-ipa` displays as `CJC-1295 with DAC` (legacy alias mapping preserved)
-9. Remaining failed pages in latest run:
-   - `https://www.alphagresearch.com/` -> `NO_OFFERS` (storefront products are on `/shop-1`)
-   - `https://dragonpharmastore.com/` -> `NO_OFFERS` (site has products; current root-target extraction gap)
-   - `https://kits4less.com/` -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`HTTP 403`, Cloudflare)
-   - `https://peptiatlas.com/` -> `INVALID_PRICING_PAYLOAD` (expected)
-10. Product-scope direction:
-   - bulk-pack handling should be deferred to v2
-   - MVP should focus on single-unit/single-vial offers only
+7. Single-unit offer enforcement is active:
+   - deterministic exclusion for bulk/pack/kit/multi-vial offers
+   - exclusions happen before alias/variant/price aggregation
+   - worker emits `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT`
+8. Safe-mode access-block handling is generalized:
+   - provider-aware classification uses `safe_mode_access_blocked`
+   - Cloudflare remains tagged for compatibility (`safe_mode_cloudflare_blocked`)
+9. Woo invalid-pricing handling is active:
+   - `https://peptiatlas.com/` emits `INVALID_PRICING_PAYLOAD` (expected)
+10. Remaining failed pages in latest run:
+   - `https://kits4less.com/` -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403`)
+   - `https://peptiatlas.com/` -> `INVALID_PRICING_PAYLOAD`
+11. Newly onboarded vendors this pass (all page status `success`):
+   - `precisionpeptideco.com`
+   - `aminoasylumllc.com`
+   - `elitepeptides.com`
+   - `peptidesworld.com`
+   - `amplifypeptides.com`
+   - `peptidesupplyco.org`
+   - `trustedpeptide.net`
+   - `crushresearch.com`
+12. Open alias-review items needing manual adjudication:
+   - Amplify Peptides: `SYN-31 10mg`, `HN-24 10mg`, `SNP-8 10mg`, `PNL-3 20mg`
+   - Amino Asylum: `T2 200MCG/ML`, `Prami`, `Adex`, `Stampede`, `PYRO 7MG`, `Helios`, `GAC EXTREME`
+   - Crush Research: `Triple Agonist 15mg : Single`
+   - Peptides World: `P-21-10Mg`, `Adipotide-FTPP 10mg`
 
 Primary tasks for next chat:
-1. Enforce single-unit offer policy at ingestion:
-   - add deterministic exclusion for bulk/pack/kit/multi-vial offers
-   - ensure these are excluded before variant/price aggregation for public views
-   - add regression tests for single-vial-only filtering path
-2. Fix `NO_OFFERS` gaps for real storefronts:
-   - Alpha G Research: retarget seeded page to a parseable storefront path (`/shop-1`)
-   - Dragon Pharma Store: add extraction support for current PrestaShop-style listing structure (or retarget to parseable category endpoint)
-   - Kits4Less: document/handle Cloudflare 403 behavior explicitly (safe-mode limitation, retry posture, and event payload quality)
-3. Re-run robustness cycle:
+1. Resolve reopened alias queue:
+   - manually adjudicate the 14 `ai_review_cached` items (resolve vs ignore with strict peptide scope)
+   - rerun `npm run job:review-ai -- --limit=50` to confirm queue closure (`open=0`)
+2. Investigate smoke regression (`thymosin-alpha-1`):
+   - identify whether drop is from alias mapping, exclusion filtering, extraction gaps, or canonical-name drift
+   - fix deterministically and preserve strict non-noise alias policy
+3. Parse-failure queue triage hardening:
+   - audit `queue_type='parse_failure'` open items (`33`) by reason bucket
+   - ensure blocked-site payload quality stays high (`safe_mode_access_blocked` metadata completeness)
+4. Re-run robustness cycle:
    - `npm run typecheck`
    - `npm run lint`
    - `npm run test`
    - `npm run job:vendors`
    - `npm run job:review-ai -- --limit=50` (repeat bounded slices only if alias queue reopens)
    - `npm run job:smoke-top-compounds`
-4. Keep alias quality strict:
+5. Keep alias quality strict:
    - no storefront noise strings
    - no non-peptide products
    - no vendor-only blends unless explicitly canonicalized (`cagrisema` currently allowed)
-5. Update docs after completion:
+6. Update docs after completion:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
    - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
    - `/Users/belmead/Documents/stacktracker/README.md`

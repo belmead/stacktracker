@@ -1,68 +1,74 @@
 # Stack Tracker Handoff Note
 
 ## Snapshot
-- Date: 2026-02-16
+- Date: 2026-02-17
 - Project path: `/Users/belmead/Documents/stacktracker`
-- Environment: Host DNS/network is healthy; prior `ENOTFOUND` failures were caused by restricted sandbox DNS in Codex, not app or database config.
-- App status: app/test/lint/typecheck are operational; vendor ingestion currently has intermittent DB `read ECONNRESET` failures during write paths.
-- Most recent completed vendor run (without fatal DB reset): `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=1243`, `offersExcludedByRule=0`, `unresolvedAliases=0`, `aliasesSkippedByAi=668`, `aiTasksQueued=1`, ~`601.0s` runtime).
-- Most recent vendor run attempts (failed due DB reset):
-  - `2981b852-0b96-4c2b-9b68-57344bb8506e` (`status=failed`, progressed to `pagesSuccess=20`, `pagesFailed=2`, validated PeptiAtlas invalid-pricing event).
-  - `4557927e-e446-4896-8278-23ff46ef9b1a` (`status=failed`, early `read ECONNRESET`).
-  - `8d565b80-2b12-47e4-b33a-cfdb510647ef` (`status=failed`, concurrency override `1`, same `read ECONNRESET`).
-- Most recent successful vendor run: `3178fe72-36db-4335-8fff-1b3fe6ec640a` (`pagesTotal=10`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`).
+- Environment: host DNS/network healthy; restricted Codex sandboxes can still produce false `ENOTFOUND` for networked jobs.
+- App status: app/typecheck/lint/tests are operational; vendor ingestion now includes provider-aware safe-mode access-block classification and single-unit offer exclusions.
+- Most recent vendor run: `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`status=failed`, `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`, `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`, `offersExcludedByRule=427`, `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`, guardrails `invariant=pass`, `drift=pass`, `smoke=fail`).
+- Most recent passing guardrail baseline run: `973e56fa-dd68-4a26-b674-c54cebad5b19` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`).
+- Most recent pre-remediation full run (historical): `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`, `pagesSuccess=41`, `pagesFailed=4`).
 - Most recent Finnrick run: `5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
-- Most recent review-ai full run (completed 2026-02-15 before API-key fix): `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s` (~`82.86 items/min`, ~`0.72s/item`).
-- Alias triage queue current totals (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=463`, `ignored=416`.
-- Current seeded coverage: `30` active vendors / `38` active vendor pages.
-- Quality gates currently passing: `npm run typecheck`, `npm run lint`, `npm run test`.
-- Operational note: hold additional `job:finnrick` runs until vendor scrape expansion work is complete.
-- Runtime model note: vendor pages run with bounded parallel workers, but per-page discovery probes are fallback-ordered and alias AI classification still executes inline when deterministic/cache matching misses.
-- Immediate next hardening task: stabilize transient DB `read ECONNRESET` failures in vendor-job DB writes and then rerun a full 38-page robustness cycle.
+- Alias triage queue (`queue_type='alias_match'`): `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`.
+- Parse-failure queue (`queue_type='parse_failure'`): `open=33`.
+- Current seeded coverage: `45` active vendors / `53` active vendor pages.
+- Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:review-ai -- --limit=200` (latest vendor job failed smoke guardrail, not execution/runtime failure).
+- Operational note: continue deferring additional `job:finnrick` runs unless explicitly requested.
 
-## Continuation Update (2026-02-17, post-expansion rerun)
-- Coverage expanded and validated:
-  - active vendors: `37`
-  - active vendor pages: `45`
-- Latest vendor run:
-  - `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`status=partial`)
-  - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
-  - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
-  - `unresolvedAliases=0`, `aliasesSkippedByAi=774`, `aiTasksQueued=4`
-  - quality guardrails: invariant `pass`, drift `pass`, smoke `pass`
-- Latest successful vendor-scoped rerun:
-  - `9bd65c05-d052-4181-b779-d99c72df9506` (`status=success`, `pagesTotal=1`, `pagesSuccess=1`)
-- Alias queue status (`queue_type='alias_match'`):
-  - `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
-- Parse-failure queue status (`queue_type='parse_failure'`):
-  - `open=27` (separate queue from alias triage)
-- Regression/quality cycle revalidated:
+## Continuation Update (2026-02-17, onboarding batch 4 + smoke regression)
+- New vendor onboarding decisions applied in seed data:
+  - Added: `precisionpeptideco.com`, `aminoasylumllc.com`, `elitepeptides.com`, `peptidesworld.com`, `amplifypeptides.com`, `peptidesupplyco.org`, `trustedpeptide.net`, `crushresearch.com`.
+  - Removed/not onboarded from historical candidate notes: `Amino Lair`, `UWA Elite Peptides`, `Peptide Worldwide`, `Amplified Amino`, `PurePeptides`.
+- Robustness execution:
+  - `npm run job:vendors` -> `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4` (`status=failed` on smoke guardrail after ingestion).
+  - `npm run job:review-ai -- --limit=200` -> `itemsScanned=14`, `resolved=0`, `ignored=0`, `leftOpen=14` (all `ai_review_cached`).
+- Smoke guardrail failure details:
+  - Compound: `thymosin-alpha-1`
+  - Baseline vendors: `24`
+  - Current vendors: `0`
+  - Required minimum vendors: `16`
+  - Failure mode: 100% drop (`dropPct=1`)
+- New-vendor ingestion status (`lastStatus=success` for all 8):
+  - `Amino Asylum` (`activeOffers=20`)
+  - `Amplify Peptides` (`activeOffers=8`)
+  - `Crush Research` (`activeOffers=9`)
+  - `Elite Peptides` (`activeOffers=15`)
+  - `Peptide Supply Co` (`activeOffers=27`)
+  - `Peptides World` (`activeOffers=45`)
+  - `Precision Peptide Co` (`activeOffers=22`)
+  - `Trusted Peptide` (`activeOffers=5`)
+- Current open alias-review items (`queue_type='alias_match'`, `open=14`) to manually adjudicate:
+  - Amplify Peptides: `SYN-31 10mg`, `HN-24 10mg`, `SNP-8 10mg`, `PNL-3 20mg`
+  - Amino Asylum: `T2 200MCG/ML`, `Prami`, `Adex`, `Stampede`, `PYRO 7MG`, `Helios`, `GAC EXTREME`
+  - Crush Research: `Triple Agonist 15mg : Single`
+  - Peptides World: `P-21-10Mg`, `Adipotide-FTPP 10mg`
+- Current failed pages in this run:
+  - `https://kits4less.com/` -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`).
+  - `https://peptiatlas.com/` -> `INVALID_PRICING_PAYLOAD` (expected).
+
+## Continuation Update (2026-02-17, post-single-unit policy + storefront remediation)
+- Single-unit-only ingestion policy is now active:
+  - deterministic exclusion for bulk/pack/kit/multi-vial offers in normalization;
+  - exclusions applied before alias/variant/price aggregation in worker persistence;
+  - worker emits `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT`.
+- Storefront `NO_OFFERS` gaps remediated:
+  - `Alpha G Research` retargeted to `https://www.alphagresearch.com/shop-1` and now scrapes successfully.
+  - `Dragon Pharma Store` retargeted to `https://dragonpharmastore.com/64-peptides`; PrestaShop-style extractor support added and run now succeeds.
+- Kits4Less safe-mode behavior is explicit:
+  - Safe-mode access challenge is now classified with provider metadata (`safe_mode_access_blocked`) and Cloudflare compatibility tag (`safe_mode_cloudflare_blocked`) with `cf-ray` context.
+  - `NO_OFFERS` event payload includes explicit Cloudflare-block metadata.
+- Expected invalid-pricing path remains intact:
+  - `https://peptiatlas.com/` continues to emit `INVALID_PRICING_PAYLOAD` / `no_data_invalid_pricing`.
+- Regression coverage added for:
+  - single-unit filtering (`tests/unit/normalize.test.ts`);
+  - PrestaShop extraction (`tests/unit/extractors.test.ts`);
+  - Cloudflare no-offers classification and pre-aggregation exclusion behavior (`tests/unit/worker-no-offers.test.ts`).
+- Robustness cycle in this pass:
   - pass: `npm run typecheck`
   - pass: `npm run lint`
-  - pass: `npm run test` (`65` tests)
+  - pass: `npm run test` (`71` tests)
   - pass: `npm run job:review-ai -- --limit=50` (`itemsScanned=0`)
-  - pass: `npm run job:smoke-top-compounds` (`failureCount=0`, baseline `96ade0dc-cd5d-47aa-859d-064fe416eec6`)
-
-### Latest failing-page diagnostics (`96ade0dc-cd5d-47aa-859d-064fe416eec6`)
-- `Alpha G Research` (`https://www.alphagresearch.com/`) -> `NO_OFFERS`
-  - Root target is not the best storefront entry point.
-  - Validation confirms `https://www.alphagresearch.com/shop-1` parses offers successfully.
-- `Dragon Pharma Store` (`https://dragonpharmastore.com/`) -> `NO_OFFERS`
-  - Products exist on category/product pages (PrestaShop-style layout), but current root-target extraction path misses them.
-- `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED`
-  - HTML fetch failed with `HTTP 403` (Cloudflare challenge in safe mode).
-- `PeptiAtlas` (`https://peptiatlas.com/`) -> `INVALID_PRICING_PAYLOAD`
-  - Correct explicit diagnostic path is active; Woo payload still exposes product rows with all zero prices.
-
-### Pricing/normalization checks from this pass
-- Woo sale-price parsing fix verified:
-  - Eros `S 20MG` now persists as `9599` cents (`$95.99`) via `price_html` sale extraction.
-- Canonical naming cleanup verified:
-  - `cjc-1295-with-dac-and-ipa` now displays as `CJC-1295 with DAC`; legacy alias strings still resolve.
-
-### Scope decision carried forward
-- Bulk/multi-pack listings are currently still ingested.
-- Next chat should enforce MVP focus on single-unit offers (single vial/capsule/etc.) and defer bulk handling to v2.
+  - pass: `npm run job:smoke-top-compounds` (`failureCount=0`, baseline `973e56fa-dd68-4a26-b674-c54cebad5b19`)
 
 ## Invalid Pricing + Peptide Price Summary Update (2026-02-16)
 - Woo zero-priced payload hardening shipped:

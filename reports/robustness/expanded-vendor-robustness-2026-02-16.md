@@ -1,50 +1,65 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
-## Continuation Snapshot (2026-02-17)
-### Full-cycle rerun
-- Vendor run: `96ade0dc-cd5d-47aa-859d-064fe416eec6` (`manual/safe`)
-- Run status: `partial`
-- Summary:
-  - `pagesTotal=45`, `pagesSuccess=41`, `pagesFailed=4`
-  - `offersCreated=0`, `offersUpdated=141`, `offersUnchanged=1206`
-  - `unresolvedAliases=0`, `aliasesSkippedByAi=774`, `aiTasksQueued=4`
-  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+## Continuation Snapshot (2026-02-17, post-onboarding run)
+### Newly onboarded vendors (this pass)
+- Added to seed/onboarded:
+  - `precisionpeptideco.com`
+  - `aminoasylumllc.com`
+  - `elitepeptides.com`
+  - `peptidesworld.com`
+  - `amplifypeptides.com`
+  - `peptidesupplyco.org`
+  - `trustedpeptide.net`
+  - `crushresearch.com`
 
-### Post-run cycle checks
-- `npm run typecheck`: pass
-- `npm run lint`: pass
-- `npm run test`: pass (`65` tests)
-- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`)
-- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline `96ade0dc-cd5d-47aa-859d-064fe416eec6`)
+### Robustness cycle
+- `npm run job:vendors`:
+  - run `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`
+  - status `failed` (guardrail failure after ingestion)
+  - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
+  - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
+  - `offersExcludedByRule=427`
+  - `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=fail`
+- Smoke failure detail:
+  - `thymosin-alpha-1` dropped from `24` vendors in baseline to `0` current (`required=16`, `dropPct=1`).
+- Latest passing guardrail baseline remains:
+  - run `973e56fa-dd68-4a26-b674-c54cebad5b19` (`invariant/drift/smoke = pass`).
 
-### Queue/coverage snapshot after rerun
-- Alias queue (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`
-- Parse-failure queue (`queue_type='parse_failure'`): `open=27` (separate from alias queue)
-- Active coverage: `37` vendors / `45` vendor pages
+### AI validation after scrape
+- `npm run job:review-ai -- --limit=200`
+  - `itemsScanned=14`, `resolved=0`, `ignored=0`, `leftOpen=14`
+  - all remaining alias items are `ai_review_cached` and require manual adjudication.
+- Open alias-review items in this pass:
+  - Amplify Peptides: `SYN-31 10mg`, `HN-24 10mg`, `SNP-8 10mg`, `PNL-3 20mg`
+  - Amino Asylum: `T2 200MCG/ML`, `Prami`, `Adex`, `Stampede`, `PYRO 7MG`, `Helios`, `GAC EXTREME`
+  - Crush Research: `Triple Agonist 15mg : Single`
+  - Peptides World: `P-21-10Mg`, `Adipotide-FTPP 10mg`
 
-### Explicit failing-page diagnostics (latest run)
-- `Alpha G Research` (`https://www.alphagresearch.com/`):
-  - `NO_OFFERS` on root target.
-  - Validation confirmed `https://www.alphagresearch.com/shop-1` is parseable and returns product offers.
-- `Dragon Pharma Store` (`https://dragonpharmastore.com/`):
-  - `NO_OFFERS` on root target.
-  - Validation confirmed peptide category pages (for example `/64-peptides`) expose product links/prices; current extractor misses this layout from configured root target.
+### Queue/coverage snapshot
+- Alias queue (`queue_type='alias_match'`): `open=14`, `in_progress=0`, `resolved=466`, `ignored=418`
+- Parse-failure queue (`queue_type='parse_failure'`): `open=33`
+- Active coverage: `45` vendors / `53` vendor pages
+
+### New vendor ingestion outcomes
+- `Amino Asylum`: `success`, `activeOffers=20`
+- `Amplify Peptides`: `success`, `activeOffers=8`
+- `Crush Research`: `success`, `activeOffers=9`
+- `Elite Peptides`: `success`, `activeOffers=15`
+- `Peptide Supply Co`: `success`, `activeOffers=27`
+- `Peptides World`: `success`, `activeOffers=45`
+- `Precision Peptide Co`: `success`, `activeOffers=22`
+- `Trusted Peptide`: `success`, `activeOffers=5`
+
+### Current failed-page diagnostics
 - `Kits4Less` (`https://kits4less.com/`):
-  - `DISCOVERY_ATTEMPT_FAILED` (`HTTP 403`, HTML) and `NO_OFFERS`.
-  - Root cause is Cloudflare blocking in safe-mode fetch path.
+  - `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`).
 - `PeptiAtlas` (`https://peptiatlas.com/`):
   - `INVALID_PRICING_PAYLOAD` (expected/desired behavior).
-  - Woo payload still returns candidates with all price fields at zero.
 
-### Pricing canonicalization checks
-- Woo `price_html` sale-price precedence is now active:
-  - Eros `S 20MG` persisted price confirmed at `9599` cents (`$95.99`).
-- CJC-with-DAC canonical naming cleanup is active:
-  - `cjc-1295-with-dac-and-ipa` displays as `CJC-1295 with DAC` with legacy alias compatibility.
-
-### Scope note for next phase
-- Bulk-pack handling remains present in raw ingestion today.
-- Next execution phase should enforce MVP single-unit focus (exclude bulk/pack/kit offers at ingestion and keep bulk economics for v2).
+### Scope status
+- MVP single-unit policy is active for ingestion/public offer aggregation.
+- Bulk-pack economics remain deferred to v2.
 
 ## Scope
 - Third expansion batch: 12 additional vetted US storefront/API vendors added to `sql/seed.sql`:

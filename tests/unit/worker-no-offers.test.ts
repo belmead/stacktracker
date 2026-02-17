@@ -265,4 +265,187 @@ describe("runVendorScrapeJob no-offers diagnostics", () => {
     expect(eventCodes).toContain("NO_OFFERS");
     expect(eventCodes).not.toContain("INVALID_PRICING_PAYLOAD");
   });
+
+  it("classifies Cloudflare 403 safe-mode blocks with explicit parse-failure reason", async () => {
+    mockDiscoverOffers.mockResolvedValue({
+      offers: [],
+      source: null,
+      origin: null,
+      attempts: [
+        {
+          source: "html",
+          success: false,
+          offers: 0,
+          durationMs: 42,
+          error: "HTTP 403 (cloudflare_challenge_safe_mode; cf-ray=test-ray)"
+        }
+      ],
+      diagnostics: []
+    });
+
+    const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+    await runVendorScrapeJob({
+      runMode: "manual",
+      scrapeMode: "safe",
+      triggeredBy: "test",
+      vendorId: "vendor_1"
+    });
+
+    expect(mockCreateAiAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "safe_mode_cloudflare_blocked"
+      })
+    );
+    expect(mockCreateReviewQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reason: "safe_mode_cloudflare_blocked",
+          cloudflareBlocked: true
+        })
+      })
+    );
+
+    const noOffersEvent = mockRecordScrapeEvent.mock.calls.find(([payload]) => payload.code === "NO_OFFERS")?.[0];
+    expect(noOffersEvent?.message).toContain("Cloudflare");
+    expect(noOffersEvent?.payload).toMatchObject({
+      cloudflareBlocked: true
+    });
+  });
+
+  it("classifies non-Cloudflare safe-mode access blocks with generic reason and provider metadata", async () => {
+    mockDiscoverOffers.mockResolvedValue({
+      offers: [],
+      source: null,
+      origin: null,
+      attempts: [
+        {
+          source: "html",
+          success: false,
+          offers: 0,
+          durationMs: 44,
+          error: "HTTP 403 (safe_mode_access_blocked; provider=imperva; status=403)"
+        }
+      ],
+      diagnostics: []
+    });
+
+    const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+    await runVendorScrapeJob({
+      runMode: "manual",
+      scrapeMode: "safe",
+      triggeredBy: "test",
+      vendorId: "vendor_1"
+    });
+
+    expect(mockCreateAiAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "safe_mode_access_blocked"
+      })
+    );
+    expect(mockCreateReviewQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reason: "safe_mode_access_blocked",
+          safeModeBlocked: true,
+          safeModeBlockProvider: "imperva",
+          cloudflareBlocked: false
+        })
+      })
+    );
+
+    const noOffersEvent = mockRecordScrapeEvent.mock.calls.find(([payload]) => payload.code === "NO_OFFERS")?.[0];
+    expect(noOffersEvent?.message).toContain("imperva");
+    expect(noOffersEvent?.payload).toMatchObject({
+      safeModeBlocked: true,
+      safeModeBlockProvider: "imperva",
+      cloudflareBlocked: false
+    });
+  });
+
+  it("excludes multi-unit offers before alias and variant persistence", async () => {
+    mockDiscoverOffers.mockResolvedValue({
+      offers: [
+        {
+          vendorPageId: "vp_1",
+          vendorId: "vendor_1",
+          pageUrl: "https://example.test/catalog",
+          productUrl: "https://example.test/product/bpc-157-10mg-10-vials",
+          productName: "BPC-157 10mg 10 vials",
+          compoundRawName: "BPC-157",
+          formulationRaw: "vial",
+          sizeRaw: "10mg",
+          currencyCode: "USD",
+          listPriceCents: 12500,
+          available: true,
+          rawPayload: {
+            extractor: "html"
+          }
+        },
+        {
+          vendorPageId: "vp_1",
+          vendorId: "vendor_1",
+          pageUrl: "https://example.test/catalog",
+          productUrl: "https://example.test/product/bpc-157-10mg",
+          productName: "BPC-157 10mg Vial",
+          compoundRawName: "BPC-157",
+          formulationRaw: "vial",
+          sizeRaw: "10mg",
+          currencyCode: "USD",
+          listPriceCents: 3500,
+          available: true,
+          rawPayload: {
+            extractor: "html"
+          }
+        }
+      ],
+      source: "html",
+      origin: null,
+      attempts: [],
+      diagnostics: []
+    });
+    mockResolveCompoundAlias.mockResolvedValue({
+      compoundId: "compound_1",
+      confidence: 0.99,
+      status: "auto_matched",
+      aliasNormalized: "bpc 157",
+      reason: "rules_exact"
+    });
+    mockUpdateOfferFromExtracted.mockResolvedValue("created");
+
+    const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+    await runVendorScrapeJob({
+      runMode: "manual",
+      scrapeMode: "safe",
+      triggeredBy: "test",
+      vendorId: "vendor_1"
+    });
+
+    expect(mockResolveCompoundAlias).toHaveBeenCalledTimes(1);
+    expect(mockResolveCompoundAlias).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productName: "BPC-157 10mg Vial"
+      })
+    );
+    expect(mockUpsertCompoundVariant).toHaveBeenCalledTimes(1);
+    expect(mockUpdateOfferFromExtracted).toHaveBeenCalledTimes(1);
+    expect(mockUpdateOfferFromExtracted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extracted: expect.objectContaining({
+          productName: "BPC-157 10mg Vial"
+        })
+      })
+    );
+
+    const eventCodes = mockRecordScrapeEvent.mock.calls.map(([payload]) => payload.code);
+    expect(eventCodes).toContain("OFFER_EXCLUDED_SCOPE_SINGLE_UNIT");
+
+    expect(mockMarkVendorOffersUnavailableByUrls).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productUrls: expect.arrayContaining(["https://example.test/product/bpc-157-10mg-10-vials"])
+      })
+    );
+
+    const finishArgs = mockFinishScrapeRun.mock.calls.at(-1)?.[0] as { summary?: { offersExcludedByRule?: number } } | undefined;
+    expect(finishArgs?.summary?.offersExcludedByRule).toBe(1);
+  });
 });

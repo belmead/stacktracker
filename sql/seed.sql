@@ -49,7 +49,15 @@ values
   ('Alpha G Research', 'alpha-g-research', 'https://www.alphagresearch.com/'),
   ('Kits4Less', 'kits4less', 'https://kits4less.com/'),
   ('Top Peptides', 'top-peptides', 'https://www.toppeptides.com/'),
-  ('Dragon Pharma Store', 'dragon-pharma-store', 'https://dragonpharmastore.com/')
+  ('Dragon Pharma Store', 'dragon-pharma-store', 'https://dragonpharmastore.com/'),
+  ('Precision Peptide Co', 'precision-peptide-co', 'https://precisionpeptideco.com/'),
+  ('Amino Asylum', 'amino-asylum', 'https://aminoasylumllc.com/'),
+  ('Elite Peptides', 'elite-peptides', 'https://elitepeptides.com/'),
+  ('Peptides World', 'peptides-world', 'https://peptidesworld.com/'),
+  ('Amplify Peptides', 'amplify-peptides', 'https://amplifypeptides.com/'),
+  ('Peptide Supply Co', 'peptide-supply-co', 'https://peptidesupplyco.org/'),
+  ('Trusted Peptide', 'trusted-peptide', 'https://trustedpeptide.net/'),
+  ('Crush Research', 'crush-research', 'https://crushresearch.com/')
 on conflict (slug) do update
 set
   name = excluded.name,
@@ -100,10 +108,18 @@ with desired_vendor_pages as (
       ('the-peptide-haven', 'https://thepeptidehaven.com/', 'catalog'),
       ('injectify-us', 'https://us.injectify.is/', 'catalog'),
       ('pure-peptide-labs', 'https://purepeptidelabs.shop/', 'catalog'),
-      ('alpha-g-research', 'https://www.alphagresearch.com/', 'catalog'),
+      ('alpha-g-research', 'https://www.alphagresearch.com/shop-1', 'catalog'),
       ('kits4less', 'https://kits4less.com/', 'catalog'),
       ('top-peptides', 'https://www.toppeptides.com/', 'catalog'),
-      ('dragon-pharma-store', 'https://dragonpharmastore.com/', 'catalog')
+      ('dragon-pharma-store', 'https://dragonpharmastore.com/64-peptides', 'catalog'),
+      ('precision-peptide-co', 'https://precisionpeptideco.com/', 'catalog'),
+      ('amino-asylum', 'https://aminoasylumllc.com/', 'catalog'),
+      ('elite-peptides', 'https://elitepeptides.com/', 'catalog'),
+      ('peptides-world', 'https://peptidesworld.com/', 'catalog'),
+      ('amplify-peptides', 'https://amplifypeptides.com/', 'catalog'),
+      ('peptide-supply-co', 'https://peptidesupplyco.org/', 'catalog'),
+      ('trusted-peptide', 'https://trustedpeptide.net/', 'catalog'),
+      ('crush-research', 'https://crushresearch.com/', 'catalog')
   ) as t(vendor_slug, url, page_type)
 )
 insert into vendor_pages (vendor_id, url, page_type)
@@ -114,6 +130,16 @@ on conflict (vendor_id, url) do update
 set
   page_type = excluded.page_type,
   updated_at = now();
+
+update vendor_pages vp
+set is_active = false,
+    updated_at = now()
+from vendors v
+where vp.vendor_id = v.id
+  and (
+    (v.slug = 'alpha-g-research' and vp.url = 'https://www.alphagresearch.com/') or
+    (v.slug = 'dragon-pharma-store' and vp.url = 'https://dragonpharmastore.com/')
+  );
 
 -- Seed compounds used by initial alias rules and UI bootstrapping.
 insert into compounds (name, slug, description)

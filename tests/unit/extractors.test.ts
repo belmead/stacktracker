@@ -139,4 +139,40 @@ describe("extractOffersFromHtml", () => {
     expect(offers[0]?.listPriceCents).toBe(7000);
     expect(offers[0]?.rawPayload?.extractor).toBe("wix_warmup_data");
   });
+
+  it("extracts PrestaShop-style product tiles", () => {
+    const html = `
+      <html>
+        <body>
+          <ul class="product_list grid row">
+            <li class="ajax_block_product col-xs-12 col-sm-6 col-lg-4">
+              <div class="product-container">
+                <h5 itemprop="name">
+                  <a class="product-name" href="https://dragonpharmastore.com/peptides/982-bpc-157.html">BPC 157 5mg</a>
+                </h5>
+                <div class="content_price">
+                  <span class="old-price product-price">$40</span>
+                  <span class="price product-price">$30</span>
+                </div>
+                <a class="ajax_add_to_cart_button btn-red" href="https://dragonpharmastore.com/cart?add=1&id_product=982">Add to cart</a>
+              </div>
+            </li>
+          </ul>
+        </body>
+      </html>
+    `;
+
+    const offers = extractOffersFromHtml({
+      html,
+      vendorPageId: "page-3",
+      vendorId: "vendor-3",
+      pageUrl: "https://dragonpharmastore.com/64-peptides"
+    });
+
+    expect(offers).toHaveLength(1);
+    expect(offers[0]?.productName).toBe("BPC 157 5mg");
+    expect(offers[0]?.productUrl).toBe("https://dragonpharmastore.com/peptides/982-bpc-157.html");
+    expect(offers[0]?.listPriceCents).toBe(4000);
+    expect(offers[0]?.rawPayload?.extractor).toBe("card_selector");
+  });
 });

@@ -28,7 +28,7 @@ import { env } from "@/lib/env";
 import { loadManualOfferExclusions } from "@/lib/exclusions/manual-offer-exclusions";
 import { computeMetricPrices, resolveVariantTotals } from "@/lib/metrics";
 import { createDiscoveryCache, discoverOffers } from "@/lib/scraping/discovery";
-import { parseProductName } from "@/lib/scraping/normalize";
+import { detectSingleUnitOfferExclusion, parseProductName } from "@/lib/scraping/normalize";
 import {
   evaluateFormulationDrift,
   evaluateFormulationInvariant,
@@ -144,6 +144,119 @@ function isTransientDatabaseError(error: unknown): boolean {
   );
 }
 
+const SAFE_MODE_ACCESS_BLOCKED_MARKER = "safe_mode_access_blocked";
+const LEGACY_CLOUDFLARE_CHALLENGE_MARKER = "cloudflare_challenge_safe_mode";
+
+interface SafeModeAccessBlockDetails {
+  provider: string;
+  statusCode: number | null;
+  cfRay: string | null;
+}
+
+interface SafeModeAccessBlockAttempt extends SafeModeAccessBlockDetails {
+  source: string;
+  error: string;
+}
+
+function isCloudflareChallengeResponse(input: {
+  serverHeader: string;
+  bodyText: string;
+  cfRay: string | null;
+}): boolean {
+  return (
+    Boolean(input.cfRay) ||
+    input.serverHeader.includes("cloudflare") ||
+    input.bodyText.includes("/cdn-cgi/") ||
+    input.bodyText.includes("/cdn-cgi/challenge-platform/") ||
+    input.bodyText.includes("attention required") ||
+    input.bodyText.includes("just a moment")
+  );
+}
+
+function formatSafeModeAccessBlockedError(input: {
+  provider: string;
+  statusCode: number;
+  cfRay: string | null;
+}): string {
+  const parts = [
+    SAFE_MODE_ACCESS_BLOCKED_MARKER,
+    `provider=${input.provider}`,
+    `status=${input.statusCode}`
+  ];
+
+  if (input.provider === "cloudflare") {
+    parts.push(LEGACY_CLOUDFLARE_CHALLENGE_MARKER);
+  }
+
+  if (input.cfRay) {
+    parts.push(`cf-ray=${input.cfRay}`);
+  }
+
+  return `HTTP ${input.statusCode} (${parts.join("; ")})`;
+}
+
+function parseSafeModeAccessBlockedError(errorMessage: string): SafeModeAccessBlockDetails | null {
+  const message = errorMessage.toLowerCase();
+  const hasNormalizedMarker = message.includes(SAFE_MODE_ACCESS_BLOCKED_MARKER);
+  const hasLegacyCloudflareMarker = message.includes(LEGACY_CLOUDFLARE_CHALLENGE_MARKER);
+
+  if (!hasNormalizedMarker && !hasLegacyCloudflareMarker) {
+    return null;
+  }
+
+  const providerMatch = errorMessage.match(/provider=([a-z0-9_-]+)/i);
+  let provider = providerMatch?.[1]?.toLowerCase() ?? "unknown";
+  if (hasLegacyCloudflareMarker || message.includes("cloudflare")) {
+    provider = "cloudflare";
+  }
+
+  const statusMatch = errorMessage.match(/status=(\d{3})/i) ?? errorMessage.match(/HTTP\s+(\d{3})/i);
+  const parsedStatus = statusMatch ? Number.parseInt(statusMatch[1], 10) : Number.NaN;
+
+  const cfRayMatch = errorMessage.match(/cf-ray=([a-z0-9-]+)/i);
+
+  return {
+    provider,
+    statusCode: Number.isFinite(parsedStatus) ? parsedStatus : null,
+    cfRay: cfRayMatch?.[1] ?? null
+  };
+}
+
+function findSafeModeAccessBlockedAttempt(attempts: DiscoveryAttemptLog[]): SafeModeAccessBlockAttempt | null {
+  for (const attempt of attempts) {
+    if (typeof attempt.error !== "string") {
+      continue;
+    }
+
+    const parsed = parseSafeModeAccessBlockedError(attempt.error);
+    if (!parsed) {
+      continue;
+    }
+
+    return {
+      source: attempt.source,
+      error: attempt.error,
+      provider: parsed.provider,
+      statusCode: parsed.statusCode,
+      cfRay: parsed.cfRay
+    };
+  }
+
+  return null;
+}
+
+function formatSafeModeProviderLabel(provider: string | null): string {
+  if (!provider) {
+    return "unknown provider";
+  }
+
+  if (provider === "cloudflare") {
+    return "Cloudflare";
+  }
+
+  return provider;
+}
+
 async function fetchPageHtml(pageUrl: string): Promise<string> {
   const maxAttempts = 3;
 
@@ -166,6 +279,28 @@ async function fetchPageHtml(pageUrl: string): Promise<string> {
         if (attempt < maxAttempts && isTransientHttpStatus(response.status)) {
           await sleep(350 * attempt);
           continue;
+        }
+
+        if (response.status === 403) {
+          const serverHeader = response.headers.get("server")?.toLowerCase() ?? "";
+          const cfRay = response.headers.get("cf-ray");
+          const bodyText = (await response.text().catch(() => "")).toLowerCase();
+
+          if (
+            isCloudflareChallengeResponse({
+              serverHeader,
+              bodyText,
+              cfRay
+            })
+          ) {
+            throw new Error(
+              formatSafeModeAccessBlockedError({
+                provider: "cloudflare",
+                statusCode: 403,
+                cfRay
+              })
+            );
+          }
         }
 
         throw new Error(`HTTP ${response.status}`);
@@ -702,6 +837,37 @@ async function persistExtractedOffers(input: {
     }
 
     const parsed = parseProductName(extracted.productName);
+    const singleUnitScopeExclusion = detectSingleUnitOfferExclusion({
+      productName: extracted.productName,
+      parsed
+    });
+    if (singleUnitScopeExclusion) {
+      offersExcludedByRule += 1;
+      input.summary.offersExcludedByRule += 1;
+      excludedProductUrls.push(extracted.productUrl);
+
+      await withDbTiming(input.summary, () =>
+        recordScrapeEvent({
+          scrapeRunId: input.scrapeRunId,
+          vendorId: input.target.vendorId,
+          severity: "info",
+          code: "OFFER_EXCLUDED_SCOPE_SINGLE_UNIT",
+          message: `Skipped offer outside single-unit MVP scope: ${extracted.productName}`,
+          payload: {
+            productName: extracted.productName,
+            productUrl: extracted.productUrl,
+            exclusionCode: singleUnitScopeExclusion.code,
+            exclusionReason: singleUnitScopeExclusion.reason,
+            packageQuantity: parsed.packageQuantity,
+            packageUnit: parsed.packageUnit,
+            formulationCode: parsed.formulationCode,
+            displaySizeLabel: parsed.displaySizeLabel
+          }
+        })
+      );
+
+      continue;
+    }
 
     await withDbTiming(input.summary, () => ensureFormulation(parsed.formulationCode, parsed.formulationLabel));
 
@@ -1281,13 +1447,32 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
           const invalidPricingDiagnostic = discovery.diagnostics.find(
             (diagnostic) => diagnostic.code === "INVALID_PRICING_PAYLOAD"
           );
-          const aiTaskReason = invalidPricingDiagnostic ? "invalid_pricing_payload" : "empty_or_js_rendered";
-          const noOffersReason = invalidPricingDiagnostic ? "invalid_pricing_payload" : "no_offers_found";
+          const safeModeBlockedAttempt = findSafeModeAccessBlockedAttempt(discovery.attempts);
+          const safeModeAccessBlocked = Boolean(safeModeBlockedAttempt);
+          const safeModeProvider = safeModeBlockedAttempt?.provider ?? null;
+          const cloudflareSafeModeBlocked = safeModeProvider === "cloudflare";
+          const aiTaskReason = invalidPricingDiagnostic
+            ? "invalid_pricing_payload"
+            : cloudflareSafeModeBlocked
+              ? "safe_mode_cloudflare_blocked"
+              : safeModeAccessBlocked
+                ? "safe_mode_access_blocked"
+              : "empty_or_js_rendered";
+          const noOffersReason = invalidPricingDiagnostic
+            ? "invalid_pricing_payload"
+            : cloudflareSafeModeBlocked
+              ? "safe_mode_cloudflare_blocked"
+              : safeModeAccessBlocked
+                ? "safe_mode_access_blocked"
+              : "no_offers_found";
           const noOffersStatus = invalidPricingDiagnostic ? "no_data_invalid_pricing" : "no_data";
           const noOffersEventCode = invalidPricingDiagnostic ? "INVALID_PRICING_PAYLOAD" : "NO_OFFERS";
+          const safeModeBlockMessage = `Safe-mode fetch blocked by ${formatSafeModeProviderLabel(safeModeProvider)}`;
           const noOffersMessage = invalidPricingDiagnostic
             ? `Invalid pricing payload detected for ${target.pageUrl}`
-            : `No offers parsed for ${target.pageUrl}`;
+            : safeModeAccessBlocked
+              ? `${safeModeBlockMessage} for ${target.pageUrl}`
+              : `No offers parsed for ${target.pageUrl}`;
 
           pageStatus = invalidPricingDiagnostic ? "invalid_pricing_payload" : "no_offers";
           const taskId = await withDbTiming(pageSummary, () =>
@@ -1311,7 +1496,17 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
               payload: {
                 taskId,
                 reason: noOffersReason,
-                diagnosticCode: invalidPricingDiagnostic?.code ?? null
+                diagnosticCode: invalidPricingDiagnostic?.code ?? null,
+                safeModeBlocked: safeModeAccessBlocked,
+                safeModeBlockProvider: safeModeProvider,
+                safeModeBlockStatus: safeModeBlockedAttempt?.statusCode ?? null,
+                safeModeBlockRayId: safeModeBlockedAttempt?.cfRay ?? null,
+                safeModeBlockSource: safeModeBlockedAttempt?.source ?? null,
+                safeModeBlockError: safeModeBlockedAttempt?.error ?? null,
+                cloudflareBlocked: cloudflareSafeModeBlocked,
+                cloudflareAttemptError: cloudflareSafeModeBlocked
+                  ? safeModeBlockedAttempt?.error ?? null
+                  : null
               }
             })
           );
@@ -1338,7 +1533,17 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
                     diagnostic: invalidPricingDiagnostic
                   }
                 : {
-                    taskId
+                    taskId,
+                    safeModeBlocked: safeModeAccessBlocked,
+                    safeModeBlockProvider: safeModeProvider,
+                    safeModeBlockStatus: safeModeBlockedAttempt?.statusCode ?? null,
+                    safeModeBlockRayId: safeModeBlockedAttempt?.cfRay ?? null,
+                    safeModeBlockSource: safeModeBlockedAttempt?.source ?? null,
+                    safeModeBlockError: safeModeBlockedAttempt?.error ?? null,
+                    cloudflareBlocked: cloudflareSafeModeBlocked,
+                    cloudflareAttemptError: cloudflareSafeModeBlocked
+                      ? safeModeBlockedAttempt?.error ?? null
+                      : null
                   }
             })
           );

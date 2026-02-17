@@ -92,8 +92,9 @@ MVP goals:
   - Product size/strength
   - Calculated normalized unit metrics
 - MVP offer-eligibility policy:
-  - Prioritize single-unit offers for comparison pages.
-  - Bulk-pack product handling is intentionally deferred and should be excluded at ingestion once single-unit filters are enabled.
+  - Enforce single-unit offers for comparison pages.
+  - Deterministically exclude bulk/pack/kit/multi-vial listings at ingestion before alias/variant/price aggregation.
+  - Bulk-pack economics and dedicated normalization remain deferred to v2.
 - Change behavior:
   - If offer is unchanged: update `last_scraped_at` / `last_seen_at`, do not append duplicate historical point.
   - If changed: append new historical record and close previous effective window.
@@ -118,6 +119,7 @@ MVP goals:
 ### Policy and fallback behavior
 - Safe-mode scrape respects robots/policy boundaries.
 - When safe mode is blocked or parsing yields no offers:
+  - Classify safe-mode access blocks explicitly (`safe_mode_access_blocked`) with provider diagnostics and Cloudflare-specific compatibility tagging (`safe_mode_cloudflare_blocked`).
   - Queue AI-agent fallback task.
   - Track task + scrape events.
   - Alert admin.
@@ -195,9 +197,17 @@ Internal jobs:
 - UI stage: minimal wireframe with tokenized styles.
 - Typography note: reserve slot for future Geist Pixel application in polish phase.
 
-## 10. Current Implementation Status (as of 2026-02-16)
+## 10. Current Implementation Status (as of 2026-02-17)
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
+- Current active coverage is `45` vendors / `53` vendor pages.
+- Single-unit ingestion policy is now active:
+  - bulk/pack/kit/multi-vial offers are excluded deterministically before alias/variant persistence;
+  - excluded offers emit `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT`.
+- Storefront remediation shipped for known root-target gaps:
+  - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1`.
+  - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop-style extraction support.
+- Safe-mode access blocking is now explicitly classified (`safe_mode_access_blocked`) with provider metadata in no-offers/discovery-failure paths.
 - Vendor catalog route (`/vendors/[slug]`) and admin category editor are implemented.
 - Category taxonomy importer is implemented and currently applies `51/51` curated assignments with multi-category support.
 - Category browsing queries are aligned with selector rules (active variants required).
@@ -234,7 +244,16 @@ Internal jobs:
   - run-over-run formulation drift alerting
   - top-compound vendor-coverage smoke checks
 - Top-compound smoke script is available via `npm run job:smoke-top-compounds` and exits non-zero when tracked coverage drops below configured thresholds.
-- Latest guardrail verification run (`8807da2b-e1d4-4ad9-93c0-15bf66999254`) is passing (`invariant=pass`, `drift=pass`, `smoke=pass`).
+- Latest passing guardrail baseline run (`973e56fa-dd68-4a26-b674-c54cebad5b19`) is passing (`invariant=pass`, `drift=pass`, `smoke=pass`).
+- Latest onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) ingested `151` new offers but failed smoke guardrail (`thymosin-alpha-1` coverage `24` -> `0`).
+- Latest robustness cycle after scope enforcement:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`71` tests)
+  - `npm run job:vendors` pass on rerun (`973e56fa-dd68-4a26-b674-c54cebad5b19`, `pagesSuccess=43`, `pagesFailed=2`, `offersExcludedByRule=320`)
+  - `npm run job:vendors` onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) failed on smoke guardrail after ingestion (`pagesSuccess=51`, `pagesFailed=2`, `offersCreated=151`, `unresolvedAliases=14`)
+  - `npm run job:review-ai -- --limit=200` pass (`itemsScanned=14`, `resolved=0`, `ignored=0`, `leftOpen=14`)
+  - `npm run job:smoke-top-compounds` was passing on baseline `973e56fa-dd68-4a26-b674-c54cebad5b19` before onboarding pass 4; onboarding run now fails the equivalent smoke guardrail in-run.
 - Strict normalized `bpc-157` `10mg` vial coverage currently includes `20` active offers (including Elite `BPC-157 10mg`).
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
@@ -242,6 +261,7 @@ Internal jobs:
   - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
   - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).
   - Batch 3 added 12 vetted storefront/API vendors (`18/26` -> `30/38` vendors/pages).
+  - Batch 4 added 8 vetted storefront vendors (`37/45` -> `45/53` vendors/pages).
 - Expanded ingestion robustness cycles (`2026-02-16`) ran with:
   - Batch 1 vendor run `d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
   - Batch 2 vendor run `37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
@@ -254,7 +274,7 @@ Internal jobs:
   - Batch 2: `open=16` -> `open=0` (net `resolved +3`, `ignored +13`).
   - Batch 3: `open=69` -> `open=0` (net `resolved +23`, `ignored +46`).
   - Stabilization rerun triage/adjudication: `open=4` -> `open=0` (net `ignored +4`).
-  - Current totals: `open=0`, `in_progress=0`, `resolved=463`, `ignored=416`.
+  - Current totals: `open=0`, `in_progress=0`, `resolved=466`, `ignored=418`.
 - Additional robustness hardening from expansion findings:
   - Cached `needs_review` aliases now allow deterministic heuristics before returning `ai_review_cached`.
   - Deterministic tirzepatide shorthand coverage now includes `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and `GLP-2 (T)` forms.
@@ -282,11 +302,15 @@ Internal jobs:
 - Recent robustness pass checks succeeded:
   - `npm run typecheck`
   - `npm run lint`
-  - `npm run test` (`64` tests including new invalid-pricing + peptide-page assertions)
-- Current runtime blocker is transient DB write-path instability during vendor jobs:
-  - repeated `read ECONNRESET` failures in `markVendorPageScrape` (`2981b852-0b96-4c2b-9b68-57344bb8506e`, `4557927e-e446-4896-8278-23ff46ef9b1a`, `8d565b80-2b12-47e4-b33a-cfdb510647ef`).
+  - `npm run test` (`71` tests including single-unit filtering, Cloudflare classification, and PrestaShop extraction assertions)
+- Latest vendor-run results for this pass:
+  - `0ac9ca28-e764-4195-8511-81f8d31eb306` failed due smoke-baseline mismatch after single-unit scope tightening.
+  - `973e56fa-dd68-4a26-b674-c54cebad5b19` rerun passed guardrails (`invariant/drift/smoke`) with `pagesSuccess=43`, `pagesFailed=2`, `offersExcludedByRule=320`.
 - Validated event evidence from run `2981b852-0b96-4c2b-9b68-57344bb8506e`:
   - `https://peptiatlas.com/` emitted `INVALID_PRICING_PAYLOAD` with `productCandidates=59`, `candidatesWithPriceFields=59`, `candidatesWithPositivePrice=0`.
+- Remaining known no-offer targets:
+  - `https://kits4less.com/` (`safe_mode_access_blocked` with provider `cloudflare` in safe mode).
+  - `https://peptiatlas.com/` (`INVALID_PRICING_PAYLOAD` expected for zero-priced payloads).
 - Finnrick ingestion has a recent successful expanded-coverage run (`5233e9be-24fb-42ba-9084-2e8dde507589`) under full-access network execution.
 - Expanded-run quality report is documented in:
   - `reports/robustness/expanded-vendor-robustness-2026-02-16.md`.
@@ -296,7 +320,7 @@ Internal jobs:
   - Enforcement remains manual-gated and now has an explicit compilation step:
     - `npm run job:exclusion-enforce` compiles only reviewer-approved exclusions into `config/manual-offer-exclusions.json`.
     - Vendor ingestion loads active rules from that config and skips/deactivates matched product URLs.
-- Remaining prerequisite for first full ingestion cycle is infrastructure:
+- Production prerequisites remain infrastructure-oriented:
   - Working Postgres endpoint (Supabase recommended).
   - Project env vars populated in Vercel and local `.env.local`.
   - Initial `db:bootstrap` execution against target database.
