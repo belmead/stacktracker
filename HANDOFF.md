@@ -19,6 +19,26 @@
 - Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:vendors`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`, `npm audit --audit-level=high`.
 - Operational note: security workflow runtime verification now depends on remote push/run availability.
 
+## Continuation Update (2026-02-20, moderate-advisory policy implementation)
+- Enterprise-style dependency policy is now codified:
+  - Added `SECURITY.md` with vulnerability-gate policy, SLA targets, and exception governance.
+  - Added tracked exception registry: `security/moderate-advisory-exceptions.json`.
+  - Added enforcement script: `scripts/security/enforce-moderate-advisories.mjs`.
+  - Added local command: `npm run security:check-moderates`.
+- Security CI dependency gate now enforces three checks:
+  - `npm audit --audit-level=high` (block high/critical across full tree),
+  - `npm audit --omit=dev --audit-level=moderate` (block moderate+ in production dependency graph),
+  - `node scripts/security/enforce-moderate-advisories.mjs` (require owner/ticket/expiry for remaining dev-only moderates).
+- Local verification for policy changes:
+  - `npm run typecheck` -> pass
+  - `npm run lint` -> pass
+  - `npm run test` -> pass (`80` tests)
+  - `npm audit --audit-level=high` -> pass (`high=0`, `critical=0`)
+  - `npm audit --omit=dev --audit-level=moderate` -> pass (`0` production vulnerabilities)
+  - `npm run security:check-moderates` -> pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
+- Runtime-safety decision:
+  - No `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because only policy/docs/workflow/script files changed (no ingestion/runtime code changes).
+
 ## Continuation Update (2026-02-20, security dependency remediation + Security CI pass)
 - Security dependency strategy applied (smallest safe scope):
   - Upgraded dev test tooling: `vitest` -> `^4.0.18`, `@vitest/coverage-v8` -> `^4.0.18`.

@@ -9,6 +9,7 @@ Start by reading:
 - `/Users/belmead/Documents/stacktracker/CHANGELOG.md`
 - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 - `/Users/belmead/Documents/stacktracker/NEXT_CHAT_PROMPT.md`
+- `/Users/belmead/Documents/stacktracker/SECURITY.md`
 
 Current verified state:
 1. Coverage:
@@ -34,35 +35,36 @@ Current verified state:
    - no replacement open parse-failure row created for `https://aminoasylumllc.com/`
 6. Latest smoke baseline:
    - `89043ac0-e797-49c2-9755-7f928a203c6a` (`job:smoke-top-compounds` passed)
-7. `thymosin-alpha-1` coverage:
-   - `27` vendors / `28` active offers
-8. Latest Finnrick run:
+7. Latest Finnrick run:
    - `28ce6525-14ce-4cfc-b043-83f9440944ea` (`status=success`)
    - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
-   - ratings use Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end
-9. Security dependency remediation (completed):
-   - commit `47fe6997ac03d1edb23914d8a4a04c60377908d1`
-   - updated `vitest` + `@vitest/coverage-v8` to `4.0.18`
-   - added npm override `minimatch: ^10.2.2`
-   - runtime ingestion code unchanged
-10. Security CI remote validation:
-    - workflow run `22238481016` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238481016))
+8. Security dependency remediation + policy state:
+   - remediation commit: `47fe6997ac03d1edb23914d8a4a04c60377908d1`
+   - `vitest` and `@vitest/coverage-v8` at `4.0.18`
+   - npm override: `minimatch ^10.2.2`
+   - policy docs/config now present:
+     - `SECURITY.md`
+     - `security/moderate-advisory-exceptions.json`
+     - `scripts/security/enforce-moderate-advisories.mjs`
+9. Current dependency vulnerability profile:
+   - `npm audit --audit-level=high`: pass (`0` high/critical)
+   - `npm audit --omit=dev --audit-level=moderate`: pass (`0` production vulnerabilities)
+   - `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
+10. Latest validated Security CI run:
+    - `22238607527` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238607527))
     - `Secret Scan (gitleaks)`: pass
-    - `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`)
-    - current audit profile: `0` high/critical, `9` moderate (ESLint/AJV chain)
-11. Local verification after remediation:
-    - `npm run typecheck`: pass
-    - `npm run lint`: pass
-    - `npm run test`: pass (`80` tests)
-    - `npm audit --audit-level=high`: pass
+    - `Dependency Vulnerability Gate`: pass
 
 Primary tasks for next chat:
-1. Decide whether to keep the current moderate-only advisory baseline or pursue a deeper lint-stack migration (for example ESLint CLI/Next 16 track) to reduce moderate advisories.
-2. If any runtime dependency or scraper/runtime code changes are introduced, run the robustness cycle:
+1. Maintain the moderate-exception lifecycle:
+   - keep owner/ticket/expiry current in `security/moderate-advisory-exceptions.json`
+   - remove stale exceptions when advisories clear
+   - expire or renew exceptions before `2026-05-21`
+2. Optional hardening track: reduce or eliminate the `9` moderate dev-tooling advisories via lint-stack modernization (for example ESLint CLI migration / Next lint deprecation path), then re-verify policy gates.
+3. If any runtime dependency or scraper/runtime code changes are introduced, run the robustness cycle:
    - `npm run job:vendors`
    - `npm run job:review-ai -- --limit=50`
    - `npm run job:smoke-top-compounds`
-3. Preserve smoke hydration and parse-failure dedupe/suppression behavior.
 4. Do not rerun Finnrick unless onboarding scope changes or explicitly requested.
 5. Update docs after any additional changes:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
@@ -71,3 +73,4 @@ Primary tasks for next chat:
    - `/Users/belmead/Documents/stacktracker/PRD.md`
    - `/Users/belmead/Documents/stacktracker/CHANGELOG.md`
    - `/Users/belmead/Documents/stacktracker/NEXT_CHAT_PROMPT.md`
+   - `/Users/belmead/Documents/stacktracker/SECURITY.md`

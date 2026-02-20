@@ -197,6 +197,10 @@ Internal jobs:
   - Internal job endpoints require shared-secret auth and are not publicly callable without token.
 - Security operations baseline:
   - CI secret scanning and dependency vulnerability scanning are required before production go-live.
+  - Dependency vulnerability policy is risk-based:
+    - block `high/critical` across full dependency tree,
+    - block `moderate+` in production dependency graph (`--omit=dev`),
+    - require owner/ticket/expiry for any remaining dev-only moderate exceptions.
   - Platform/operator accounts (deployment, DB, email provider) require MFA and auditable change logs.
 
 ## 9. Operational Defaults
@@ -271,6 +275,8 @@ Internal jobs:
   - scrape events still emit full `NETWORK_FILTER_BLOCKED` diagnostics with suppression metadata (`parseFailureQueueSuppressed`) for visibility.
 - Security controls now implemented in-code (`2026-02-17`):
   - CI security workflow adds full-history secret scanning (`gitleaks`) and high/critical dependency gating (`npm audit --audit-level=high`);
+  - CI now also gates moderate+ vulnerabilities in production dependencies (`npm audit --omit=dev --audit-level=moderate`);
+  - CI enforces tracked expiration-based exceptions for remaining moderates via `security/moderate-advisory-exceptions.json` + `scripts/security/enforce-moderate-advisories.mjs`;
   - scrape-event/review-queue payload redaction is enforced via `lib/security/redaction.ts`;
   - runtime least-privilege credential guard supports `DATABASE_RUNTIME_USER`, and bootstrap/import scripts support `DATABASE_ADMIN_URL`.
 - Latest robustness cycle:

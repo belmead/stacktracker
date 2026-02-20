@@ -1,0 +1,139 @@
+{
+  "policyVersion": "2026-02-20",
+  "lastReviewed": "2026-02-20",
+  "nextReview": "2026-03-20",
+  "slaDays": {
+    "critical": 2,
+    "high": 7,
+    "moderateProduction": 30,
+    "moderateDevOnly": 90
+  },
+  "exceptions": [
+    {
+      "package": "@eslint-community/eslint-utils",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "@eslint/eslintrc",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "@typescript-eslint/eslint-plugin",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "@typescript-eslint/parser",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "@typescript-eslint/type-utils",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "@typescript-eslint/utils",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint/next lint toolchain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "ajv",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Transitive through eslint config chain; not part of production runtime dependency graph.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "eslint",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Lint-time dependency only; no runtime exposure in production bundle/server process.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    },
+    {
+      "package": "eslint-config-next",
+      "severity": "moderate",
+      "scope": "dev-only",
+      "owner": "@belmead",
+      "ticket": "SEC-2026-001",
+      "expiresOn": "2026-05-21",
+      "rationale": "Lint-time configuration package only; no runtime exposure in production bundle/server process.",
+      "compensatingControls": [
+        "CI blocks any high/critical advisories across full dependency tree.",
+        "CI blocks moderate+ advisories in production dependencies via --omit=dev audit gate.",
+        "Moderate advisories are reviewed monthly and tracked to expiration."
+      ]
+    }
+  ]
+}

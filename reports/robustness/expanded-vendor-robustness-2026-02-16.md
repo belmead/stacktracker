@@ -24,6 +24,26 @@
 ### Robustness-cycle rerun decision
 - Skipped `job:vendors`, `job:review-ai -- --limit=50`, and `job:smoke-top-compounds` in this pass because remediation touched only dev-toolchain/transitive dependencies (no runtime scraping/job logic changes).
 
+## Continuation Snapshot (2026-02-20, moderate-advisory policy governance)
+### Policy update
+- Added dependency-security policy document: `SECURITY.md`.
+- Added tracked exception registry for dev-only moderates: `security/moderate-advisory-exceptions.json`.
+- Added enforcement script: `scripts/security/enforce-moderate-advisories.mjs`.
+- Security CI dependency gate now enforces:
+  - `npm audit --audit-level=high` (block high/critical across all deps),
+  - `npm audit --omit=dev --audit-level=moderate` (block moderate+ in production deps),
+  - `node scripts/security/enforce-moderate-advisories.mjs` (require tracked owner/ticket/expiry for remaining moderates).
+
+### Verification cycle (policy)
+- `npm audit --audit-level=high`: pass (`high=0`, `critical=0`)
+- `npm audit --omit=dev --audit-level=moderate`: pass (`0` production vulnerabilities)
+- `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
+
+### Security CI runtime validation status
+- Latest validated run: `22238607527` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238607527)).
+- `Secret Scan (gitleaks)`: pass.
+- `Dependency Vulnerability Gate`: pass.
+
 ## Continuation Snapshot (2026-02-20, robustness rerun + live suppression validation + Finnrick ratings range)
 ### Code/policy update
 - Deterministic `network_filter_blocked` queue handling uses hybrid suppression:

@@ -29,7 +29,7 @@ jobs:
         run: gitleaks git --redact --verbose
 
   dependency-vulnerability-gate:
-    name: Dependency Vulnerability Gate
+    name: Dependency Vulnerability Policy Gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,3 +46,9 @@ jobs:
 
       - name: Fail on high/critical vulnerabilities
         run: npm audit --audit-level=high
+
+      - name: Fail on moderate+ vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Enforce tracked exceptions for remaining moderate advisories
+        run: node scripts/security/enforce-moderate-advisories.mjs

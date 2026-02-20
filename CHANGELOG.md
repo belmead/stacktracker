@@ -100,6 +100,10 @@ All notable changes to Stack Tracker are documented in this file.
   - `lib/security/redaction.ts` with regression coverage in `tests/unit/redaction.test.ts`.
 - Security CI workflow:
   - `.github/workflows/security-ci.yml` adds full-history `gitleaks` scanning and high/critical dependency gating via `npm audit --audit-level=high`.
+- Security dependency policy assets:
+  - `SECURITY.md` now documents release gates, SLA targets, and exception governance for dependency advisories.
+  - `security/moderate-advisory-exceptions.json` tracks owner/ticket/expiry for approved dev-only moderate advisories.
+  - `scripts/security/enforce-moderate-advisories.mjs` validates exception coverage/expiry against `npm audit --json`.
 
 ### Changed
 - MVP single-unit scope enforcement is now active at ingestion:
@@ -283,6 +287,10 @@ All notable changes to Stack Tracker are documented in this file.
   - upgraded `vitest` and `@vitest/coverage-v8` to `4.0.18`;
   - added npm override `minimatch: ^10.2.2` to clear high-severity transitive `minimatch` advisories in lint/test dependency chains;
   - retained `next`/runtime ingestion dependencies unchanged.
+- Security CI dependency gate is now policy-driven:
+  - keeps hard fail on `high/critical` advisories across all dependencies;
+  - adds hard fail on `moderate+` advisories in production dependency graph (`npm audit --omit=dev --audit-level=moderate`);
+  - enforces tracked, non-expired exceptions for any remaining dev-only moderates.
 
 ### Verified
 - Security CI remediation validation completed:

@@ -5,6 +5,7 @@ Stack Tracker is a Next.js + Postgres application that scrapes peptide pricing, 
 Primary docs:
 - Product requirements: `PRD.md`
 - Current status and restart checklist: `HANDOFF.md`
+- Security policy and dependency governance: `SECURITY.md`
 
 ## Latest Status (2026-02-20)
 
@@ -59,6 +60,12 @@ Primary docs:
   - Live validation confirms suppression behavior on triaged rows (`c1f47324-133c-4ff5-826f-a98f82392fa4`).
 - Security controls now live in code:
   - CI secret scanning + vulnerability gating: `.github/workflows/security-ci.yml`.
+  - Dependency policy gates now enforce:
+    - block `high/critical` advisories across all dependencies,
+    - block `moderate+` advisories in production dependencies (`--omit=dev`),
+    - require tracked time-bound exceptions for remaining dev-only moderates.
+  - Tracked exception registry: `security/moderate-advisory-exceptions.json`.
+  - Enforcement script: `scripts/security/enforce-moderate-advisories.mjs`.
   - Event/review payload redaction before DB persistence: `lib/security/redaction.ts`.
   - Least-privilege runtime credential guard: optional `DATABASE_RUNTIME_USER` assertion + `DATABASE_ADMIN_URL` script split.
   - Security dependency remediation (2026-02-20): upgraded `vitest`/`@vitest/coverage-v8` to `4.0.18` and pinned `minimatch` via npm overrides (`^10.2.2`) to clear high-severity advisories in dev dependency chains.
@@ -248,6 +255,7 @@ npm run job:review-ai -- --limit=25
 npm run job:exclusion-audit
 npm run job:exclusion-enforce
 npm run job:smoke-top-compounds
+npm run security:check-moderates
 ```
 
 ## Production security hardening (implemented + remaining)
@@ -280,6 +288,8 @@ Status in this pass:
 - CI secret scanning and vulnerability gating are now implemented in `.github/workflows/security-ci.yml`:
   - `gitleaks` scans full git history.
   - `npm audit --audit-level=high` gates high/critical CVEs.
+  - `npm audit --omit=dev --audit-level=moderate` gates production-runtime moderate+ CVEs.
+  - `npm run security:check-moderates` enforces owner/ticket/expiry for dev-only moderate exceptions.
 - GitHub Actions runtime verification:
   - run `22238481016` completed successfully on `codex/mvp-scaffold`.
   - `Secret Scan (gitleaks)` and `Dependency Vulnerability Gate` both passed.
