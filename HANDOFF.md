@@ -19,6 +19,18 @@
 - Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:vendors`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`, `npm audit --audit-level=high`.
 - Operational note: security workflow runtime verification now depends on remote push/run availability.
 
+## Continuation Update (2026-02-20, markdown refresh + latest Security CI pass)
+- Documentation refresh completed across handoff/prompt/runbook files after policy rollout.
+- Committed and pushed docs sync:
+  - commit: `6b8f2b82c9f87a1f9580f172f262afed6403ed76`
+  - branch: `codex/mvp-scaffold`
+- Security CI remote validation (post-docs push):
+  - Workflow run: `22239230993` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239230993)).
+  - `Secret Scan (gitleaks)`: pass.
+  - `Dependency Vulnerability Policy Gate`: pass.
+- Runtime-safety decision:
+  - No `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because changes were markdown/docs-only.
+
 ## Continuation Update (2026-02-20, policy push + Security CI validation)
 - Committed and pushed policy-governance implementation:
   - commit: `5d7b105f55195f48757a25fc0d0106f21ab67ca5`

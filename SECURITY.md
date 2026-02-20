@@ -44,3 +44,4 @@ Exceptions are temporary and must not be indefinite.
 - Workflow: `.github/workflows/security-ci.yml`
 - Exception registry: `security/moderate-advisory-exceptions.json`
 - Policy enforcement script: `scripts/security/enforce-moderate-advisories.mjs`
+- Latest validated workflow run: `22239230993` (`Secret Scan (gitleaks)` + `Dependency Vulnerability Policy Gate` passed).

@@ -305,7 +305,7 @@ Internal jobs:
 - Latest Finnrick run: `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
 - Finnrick rating presentation now uses textual `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end in parsing, storage selection, and UI rendering.
 - Security CI runtime validation:
-  - Remote run validated: `Security CI` run `22239142426` on `codex/mvp-scaffold`.
+  - Remote run validated: `Security CI` run `22239230993` on `codex/mvp-scaffold`.
   - `Secret Scan (gitleaks)` passed.
   - `Dependency Vulnerability Policy Gate` passed.
   - Current audit profile is moderate-only (`9` moderate advisories in ESLint/AJV chains; no high/critical findings).

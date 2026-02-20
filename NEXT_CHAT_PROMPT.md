@@ -41,6 +41,7 @@ Current verified state:
 8. Security dependency remediation + policy state:
    - remediation commit: `47fe6997ac03d1edb23914d8a4a04c60377908d1`
    - policy enforcement commit: `5d7b105f55195f48757a25fc0d0106f21ab67ca5`
+   - docs sync commit: `6b8f2b82c9f87a1f9580f172f262afed6403ed76`
    - `vitest` and `@vitest/coverage-v8` at `4.0.18`
    - npm override: `minimatch ^10.2.2`
    - policy docs/config now present:
@@ -52,7 +53,7 @@ Current verified state:
    - `npm audit --omit=dev --audit-level=moderate`: pass (`0` production vulnerabilities)
    - `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
 10. Latest validated Security CI run:
-    - `22239142426` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239142426))
+    - `22239230993` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239230993))
     - `Secret Scan (gitleaks)`: pass
     - `Dependency Vulnerability Policy Gate`: pass
 

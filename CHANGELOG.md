@@ -305,6 +305,11 @@ All notable changes to Stack Tracker are documented in this file.
   - `Security CI` run `22239142426` passed both jobs:
     - `Secret Scan (gitleaks)` pass
     - `Dependency Vulnerability Policy Gate` pass (high/critical gate pass, production-moderate gate pass, moderate-exception enforcement pass)
+- Security documentation synchronization validation completed:
+  - commit `6b8f2b82c9f87a1f9580f172f262afed6403ed76` pushed to `codex/mvp-scaffold`.
+  - `Security CI` run `22239230993` passed both jobs:
+    - `Secret Scan (gitleaks)` pass
+    - `Dependency Vulnerability Policy Gate` pass.
 - Robustness-cycle rerun was intentionally skipped in this pass because remediation touched only dev-toolchain/transitive dependencies (no runtime scraper/job code changes).
 - Latest robustness cycle completed with:
   - `npm run typecheck` pass
