@@ -21,6 +21,25 @@
 ### Robustness-cycle rerun decision
 - Skipped `job:vendors`, `job:review-ai -- --limit=50`, and `job:smoke-top-compounds` in this pass because changes are tooling/config/security-registry only and do not modify runtime scraping/job logic.
 
+## Continuation Snapshot (2026-02-20, app-ci workflow expansion)
+### CI workflow update
+- Added `.github/workflows/app-ci.yml` for non-security quality gates on PR/push:
+  - `npm ci`
+  - `npm run db:bootstrap` (against CI Postgres service)
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run test`
+  - `npm run build`
+
+### Verification cycle (local)
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run test`: pass (`80` tests)
+- `npm run build`: pass
+- `npm audit --audit-level=high`: pass (`0` vulnerabilities)
+- `npm audit --omit=dev --audit-level=moderate`: pass (`0` vulnerabilities)
+- `npm run security:check-moderates`: pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)
+
 ## Continuation Snapshot (2026-02-20, security dependency remediation + Security CI pass)
 ### Security dependency update
 - Applied smallest safe dependency strategy for the vulnerability gate:

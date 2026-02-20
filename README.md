@@ -60,6 +60,7 @@ Primary docs:
   - Live validation confirms suppression behavior on triaged rows (`c1f47324-133c-4ff5-826f-a98f82392fa4`).
 - Security controls now live in code:
   - CI secret scanning + vulnerability gating: `.github/workflows/security-ci.yml`.
+  - General app quality CI: `.github/workflows/app-ci.yml` (`db:bootstrap`, `lint`, `typecheck`, `test`, `build` on PR/push).
   - Dependency policy gates now enforce:
     - block `high/critical` advisories across all dependencies,
     - block `moderate+` advisories in production dependencies (`--omit=dev`),

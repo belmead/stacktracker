@@ -5,6 +5,8 @@ All notable changes to Stack Tracker are documented in this file.
 ## [Unreleased]
 
 ### Added
+- General app CI workflow:
+  - `.github/workflows/app-ci.yml` runs `npm ci`, `npm run db:bootstrap`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` on PR/push.
 - Next.js App Router MVP scaffold with public pages:
   - Homepage (`/`) with floating nav, hero, top-five cards, vendor tables.
   - Peptide detail template (`/peptides/[slug]`) with trend chart, variant switching, and pagination.

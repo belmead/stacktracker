@@ -60,6 +60,9 @@ Current verified state:
     - `22239230993` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239230993))
     - `Secret Scan (gitleaks)`: pass
     - `Dependency Vulnerability Policy Gate`: pass
+11. General app CI workflow:
+    - `.github/workflows/app-ci.yml` now runs on PR/push (`main` + `codex/**`).
+    - Gate order: `npm ci` -> `npm run db:bootstrap` -> `npm run lint` -> `npm run typecheck` -> `npm run test` -> `npm run build`.
 
 Primary tasks for next chat:
 1. Maintain the zero-moderate baseline:
@@ -72,7 +75,10 @@ Primary tasks for next chat:
    - `npm run job:review-ai -- --limit=50`
    - `npm run job:smoke-top-compounds`
 4. Do not rerun Finnrick unless onboarding scope changes or explicitly requested.
-5. Update docs after any additional changes:
+5. Keep both CI workflows green after dependency/tooling updates:
+   - `.github/workflows/security-ci.yml`
+   - `.github/workflows/app-ci.yml`
+6. Update docs after any additional changes:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
    - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
    - `/Users/belmead/Documents/stacktracker/README.md`

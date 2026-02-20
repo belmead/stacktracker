@@ -1,0 +1,62 @@
+name: App CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stacktracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stacktracker"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NEXT_PUBLIC_APP_URL: https://ci.example.com
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/stacktracker
+      DATABASE_SSL_MODE: disable
+      DATABASE_PREPARE: true
+      ADMIN_EMAIL: ci@example.com
+      ADMIN_AUTH_SECRET: ci-admin-auth-for-tests-only
+      CRON_SECRET: ci-cron-auth-for-tests-only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bootstrap schema + seed
+        run: npm run db:bootstrap
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build

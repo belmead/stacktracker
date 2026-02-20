@@ -43,6 +43,7 @@ Exceptions are temporary and must not be indefinite.
 
 ## CI Implementation
 - Workflow: `.github/workflows/security-ci.yml`
+- Companion quality workflow: `.github/workflows/app-ci.yml` (lint/typecheck/test/build + CI DB bootstrap)
 - Exception registry: `security/moderate-advisory-exceptions.json`
 - Policy enforcement script: `scripts/security/enforce-moderate-advisories.mjs`
 - Latest validated workflow run: `22239230993` (`Secret Scan (gitleaks)` + `Dependency Vulnerability Policy Gate` passed).

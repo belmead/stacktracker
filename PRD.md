@@ -274,6 +274,7 @@ Internal jobs:
   - repeated identical triaged signatures on the same `(vendor_id, page_url)` are suppressed for a configurable cooldown window (`NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS`, default `14`);
   - scrape events still emit full `NETWORK_FILTER_BLOCKED` diagnostics with suppression metadata (`parseFailureQueueSuppressed`) for visibility.
 - Security controls now implemented in-code (`2026-02-17`):
+  - General app quality CI workflow is now present at `.github/workflows/app-ci.yml` (runs `db:bootstrap`, lint, typecheck, tests, and build on PR/push).
   - CI security workflow adds full-history secret scanning (`gitleaks`) and high/critical dependency gating (`npm audit --audit-level=high`);
   - CI now also gates moderate+ vulnerabilities in production dependencies (`npm audit --omit=dev --audit-level=moderate`);
   - CI enforces tracked expiration-based exceptions for remaining moderates via `security/moderate-advisory-exceptions.json` + `scripts/security/enforce-moderate-advisories.mjs`;

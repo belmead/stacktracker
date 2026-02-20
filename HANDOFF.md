@@ -37,6 +37,22 @@
 - Runtime-safety decision:
   - No `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because changes are tooling/config/security-registry only (no runtime ingestion code changes).
 
+## Continuation Update (2026-02-20, app-ci workflow expansion)
+- Added general quality workflow: `.github/workflows/app-ci.yml`.
+  - Trigger scope: PRs + pushes on `main` and `codex/**`.
+  - Gate sequence: `npm ci` -> `npm run db:bootstrap` -> `npm run lint` -> `npm run typecheck` -> `npm run test` -> `npm run build`.
+  - Workflow uses an internal Postgres service (`postgres:16-alpine`) with CI-safe env defaults so build-time data routes (for example sitemap) can complete.
+- Local verification in this pass:
+  - `npm run lint` -> pass
+  - `npm run typecheck` -> pass
+  - `npm run test` -> pass (`80` tests)
+  - `npm audit --audit-level=high` -> pass (`0` vulnerabilities)
+  - `npm audit --omit=dev --audit-level=moderate` -> pass (`0` vulnerabilities)
+  - `npm run security:check-moderates` -> pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)
+  - `npm run build` -> pass
+- Runtime-safety decision:
+  - No `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because changes are CI/docs only (no runtime ingestion code changes).
+
 ## Continuation Update (2026-02-20, markdown refresh + latest Security CI pass)
 - Documentation refresh completed across handoff/prompt/runbook files after policy rollout.
 - Committed and pushed docs sync:
