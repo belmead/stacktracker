@@ -19,6 +19,24 @@
 - Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:vendors`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`, `npm audit --audit-level=high`.
 - Operational note: security workflow runtime verification now depends on remote push/run availability.
 
+## Continuation Update (2026-02-20, policy push + Security CI validation)
+- Committed and pushed policy-governance implementation:
+  - commit: `5d7b105f55195f48757a25fc0d0106f21ab67ca5`
+  - branch: `codex/mvp-scaffold`
+- Local verification in this pass:
+  - `npm audit --audit-level=high` -> pass (`high=0`, `critical=0`, `moderate=9`)
+  - `npm audit --omit=dev --audit-level=moderate` -> pass (`0` production vulnerabilities)
+  - `npm run security:check-moderates` -> pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
+  - `npm run typecheck` -> pass
+  - `npm run lint` -> pass
+  - `npm run test` -> pass (`80` tests)
+- Security CI remote validation (post-push):
+  - Workflow run: `22239142426` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239142426)).
+  - `Secret Scan (gitleaks)`: pass.
+  - `Dependency Vulnerability Policy Gate`: pass.
+- Runtime-safety decision:
+  - No `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because changes are policy/docs/workflow-only (no runtime ingestion code changes).
+
 ## Continuation Update (2026-02-20, moderate-advisory policy implementation)
 - Enterprise-style dependency policy is now codified:
   - Added `SECURITY.md` with vulnerability-gate policy, SLA targets, and exception governance.

@@ -70,9 +70,9 @@ Primary docs:
   - Least-privilege runtime credential guard: optional `DATABASE_RUNTIME_USER` assertion + `DATABASE_ADMIN_URL` script split.
   - Security dependency remediation (2026-02-20): upgraded `vitest`/`@vitest/coverage-v8` to `4.0.18` and pinned `minimatch` via npm overrides (`^10.2.2`) to clear high-severity advisories in dev dependency chains.
 - Security CI remote validation note:
-  - Workflow run `22238481016` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
+  - Workflow run `22239142426` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
   - `Secret Scan (gitleaks)`: pass.
-  - `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`).
+  - `Dependency Vulnerability Policy Gate`: pass (`npm audit --audit-level=high`, `npm audit --omit=dev --audit-level=moderate`, `npm run security:check-moderates`).
   - Current audit profile: `0` high/critical, `9` moderate advisories (ESLint/AJV chain).
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
@@ -291,8 +291,8 @@ Status in this pass:
   - `npm audit --omit=dev --audit-level=moderate` gates production-runtime moderate+ CVEs.
   - `npm run security:check-moderates` enforces owner/ticket/expiry for dev-only moderate exceptions.
 - GitHub Actions runtime verification:
-  - run `22238481016` completed successfully on `codex/mvp-scaffold`.
-  - `Secret Scan (gitleaks)` and `Dependency Vulnerability Gate` both passed.
+  - run `22239142426` completed successfully on `codex/mvp-scaffold`.
+  - `Secret Scan (gitleaks)` and `Dependency Vulnerability Policy Gate` both passed.
 - Current dependency-vulnerability status:
   - `npm audit --audit-level=high` passes (no high/critical vulnerabilities).
   - `npm audit` currently reports `9` moderate advisories (ESLint/AJV chain), with no high/critical findings.

@@ -40,9 +40,9 @@
 - `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
 
 ### Security CI runtime validation status
-- Latest validated run: `22238607527` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238607527)).
+- Latest validated run: `22239142426` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239142426)).
 - `Secret Scan (gitleaks)`: pass.
-- `Dependency Vulnerability Gate`: pass.
+- `Dependency Vulnerability Policy Gate`: pass.
 
 ## Continuation Snapshot (2026-02-20, robustness rerun + live suppression validation + Finnrick ratings range)
 ### Code/policy update

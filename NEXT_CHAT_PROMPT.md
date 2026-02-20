@@ -1,6 +1,6 @@
 # Next Chat Prompt
 
-Continue from `/Users/belmead/Documents/stacktracker` on branch `codex/mvp-scaffold` with the current working tree changes intact.
+Continue from `/Users/belmead/Documents/stacktracker` on branch `codex/mvp-scaffold` with a clean working tree.
 
 Start by reading:
 - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
@@ -40,6 +40,7 @@ Current verified state:
    - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
 8. Security dependency remediation + policy state:
    - remediation commit: `47fe6997ac03d1edb23914d8a4a04c60377908d1`
+   - policy enforcement commit: `5d7b105f55195f48757a25fc0d0106f21ab67ca5`
    - `vitest` and `@vitest/coverage-v8` at `4.0.18`
    - npm override: `minimatch ^10.2.2`
    - policy docs/config now present:
@@ -51,9 +52,9 @@ Current verified state:
    - `npm audit --omit=dev --audit-level=moderate`: pass (`0` production vulnerabilities)
    - `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
 10. Latest validated Security CI run:
-    - `22238607527` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238607527))
+    - `22239142426` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239142426))
     - `Secret Scan (gitleaks)`: pass
-    - `Dependency Vulnerability Gate`: pass
+    - `Dependency Vulnerability Policy Gate`: pass
 
 Primary tasks for next chat:
 1. Maintain the moderate-exception lifecycle:
