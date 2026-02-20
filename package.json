@@ -1,0 +1,50 @@
+{
+  "name": "stacktracker",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "oxlint . --ignore-pattern next-env.d.ts --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:bootstrap": "node --env-file-if-exists=.env.local --import tsx scripts/db-bootstrap.ts",
+    "db:import-categories": "node --env-file-if-exists=.env.local --import tsx scripts/import-compound-categories.ts",
+    "job:vendors": "node --env-file-if-exists=.env.local --import tsx scripts/run-vendor-job.ts",
+    "job:finnrick": "node --env-file-if-exists=.env.local --import tsx scripts/run-finnrick-job.ts",
+    "job:review-ai": "node --env-file-if-exists=.env.local --import tsx scripts/run-review-ai-triage.ts",
+    "job:exclusion-audit": "node --env-file-if-exists=.env.local --import tsx scripts/run-single-vendor-exclusion-audit.ts",
+    "job:exclusion-enforce": "node --env-file-if-exists=.env.local --import tsx scripts/run-single-vendor-exclusion-enforcement.ts",
+    "job:smoke-top-compounds": "node --env-file-if-exists=.env.local --import tsx scripts/run-top-compounds-smoke-test.ts",
+    "security:check-moderates": "node scripts/security/enforce-moderate-advisories.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "next": "15.5.12",
+    "postgres": "^3.4.5",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "resend": "^4.1.2",
+    "robots-parser": "^3.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitest/coverage-v8": "^4.0.18",
+    "oxlint": "^1.49.0",
+    "playwright": "^1.50.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "minimatch": "^10.2.2"
+  }
+}

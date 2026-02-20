@@ -1,0 +1,12 @@
+{
+  "policyVersion": "2026-02-20",
+  "lastReviewed": "2026-02-20",
+  "nextReview": "2026-03-20",
+  "slaDays": {
+    "critical": 2,
+    "high": 7,
+    "moderateProduction": 30,
+    "moderateDevOnly": 90
+  },
+  "exceptions": []
+}

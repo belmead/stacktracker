@@ -1,0 +1,279 @@
+import type { ExtractedOffer, NormalizedVariant } from "@/lib/types";
+import { stripStorefrontNoise } from "@/lib/alias/normalize";
+
+export interface ParsedProductName {
+  compoundRawName: string;
+  formulationCode: string;
+  formulationLabel: string;
+  displaySizeLabel: string;
+  strengthValue: number | null;
+  strengthUnit: string | null;
+  packageQuantity: number | null;
+  packageUnit: string | null;
+}
+
+export interface SingleUnitOfferExclusion {
+  code: string;
+  reason: string;
+}
+
+const MASS_STRENGTH_UNITS = new Set(["mcg", "ug", "mg", "g"]);
+const MULTI_UNIT_SCOPE_PATTERNS: Array<{ code: string; reason: string; pattern: RegExp }> = [
+  {
+    code: "bulk_keyword",
+    reason: "contains bulk keyword",
+    pattern: /\bbulk\b/i
+  },
+  {
+    code: "bundle_keyword",
+    reason: "contains bundle keyword",
+    pattern: /\bbundle\b/i
+  },
+  {
+    code: "multi_unit_keyword",
+    reason: "contains multi-unit keyword",
+    pattern: /\bmulti[\s-]?(?:vials?|packs?|kits?|capsules?|tablets?|troches?|sprays?|units?|doses?)\b/i
+  },
+  {
+    code: "pack_keyword",
+    reason: "contains pack keyword",
+    pattern: /\bpacks?\b/i
+  },
+  {
+    code: "kit_keyword",
+    reason: "contains kit keyword",
+    pattern: /\bkits?\b/i
+  },
+  {
+    code: "box_of_quantity",
+    reason: "contains box-of quantity keyword",
+    pattern: /\bbox(?:es)?\s+of\s+\d+(?:\.\d+)?\b/i
+  }
+];
+
+const FORMULATION_RULES: Array<{ code: string; label: string; patterns: RegExp[] }> = [
+  { code: "vial", label: "Vial", patterns: [/\bvials?\b/, /lyophilized/, /injectable/, /for injection/] },
+  { code: "cream", label: "Cream", patterns: [/\bcream\b/, /topical/] },
+  { code: "troche", label: "Troche", patterns: [/\btroche\b/] },
+  { code: "spray", label: "Spray", patterns: [/\bspray\b/, /nasal/] },
+  { code: "capsule", label: "Capsule", patterns: [/\bcapsules?\b/, /\bcaps\b/] },
+  { code: "tablet", label: "Tablet", patterns: [/\btablet\b/, /\btab\b/] },
+  { code: "solution", label: "Solution", patterns: [/\bsolution\b/, /liquid/] },
+  { code: "gel", label: "Gel", patterns: [/\bgel\b/] }
+];
+
+function normalizeWhitespace(input: string): string {
+  return input.replace(/\s+/g, " ").trim();
+}
+
+export function detectFormulation(input: {
+  productName: string;
+  strengthUnit: string | null;
+  packageUnit: string | null;
+}): { code: string; label: string } {
+  const text = input.productName.toLowerCase();
+
+  for (const rule of FORMULATION_RULES) {
+    if (rule.patterns.some((pattern) => pattern.test(text))) {
+      return { code: rule.code, label: rule.label };
+    }
+  }
+
+  const normalizedPackageUnit = input.packageUnit?.toLowerCase() ?? null;
+  if (normalizedPackageUnit === "vial") {
+    return { code: "vial", label: "Vial" };
+  }
+
+  const normalizedStrengthUnit = input.strengthUnit?.toLowerCase() ?? null;
+  if (normalizedStrengthUnit && MASS_STRENGTH_UNITS.has(normalizedStrengthUnit) && !normalizedPackageUnit) {
+    return { code: "vial", label: "Vial" };
+  }
+
+  return { code: "other", label: "Other" };
+}
+
+export function inferCompoundRawName(productName: string): string {
+  return normalizeWhitespace(stripStorefrontNoise(productName)).slice(0, 120);
+}
+
+function parsePackageQuantity(text: string): { quantity: number | null; unit: string | null } {
+  const multiPack = text.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(vials?|capsules?|troches?|sprays?|tablets?)/i);
+  if (multiPack) {
+    return {
+      quantity: Number(multiPack[1]),
+      unit: multiPack[2].toLowerCase().replace(/s$/, "")
+    };
+  }
+
+  const count = text.match(/(\d+(?:\.\d+)?)\s*(capsules?|troches?|sprays?|tablets?)/i);
+  if (count) {
+    return {
+      quantity: Number(count[1]),
+      unit: count[2].toLowerCase().replace(/s$/, "")
+    };
+  }
+
+  const vialCount = text.match(/(\d+(?:\.\d+)?)\s*(vials?)/i);
+  if (vialCount) {
+    return {
+      quantity: Number(vialCount[1]),
+      unit: "vial"
+    };
+  }
+
+  return {
+    quantity: null,
+    unit: null
+  };
+}
+
+export function detectSingleUnitOfferExclusion(input: {
+  productName: string;
+  parsed?: ParsedProductName;
+}): SingleUnitOfferExclusion | null {
+  const normalizedProductName = normalizeWhitespace(stripStorefrontNoise(input.productName)).toLowerCase();
+  if (!normalizedProductName) {
+    return null;
+  }
+
+  const parsed = input.parsed ?? parseProductName(input.productName);
+  if (parsed.packageQuantity && parsed.packageQuantity > 1) {
+    const normalizedQuantity = Number.isInteger(parsed.packageQuantity)
+      ? String(parsed.packageQuantity)
+      : String(parsed.packageQuantity);
+    const quantityUnit = parsed.packageUnit ? `${parsed.packageUnit}${parsed.packageQuantity === 1 ? "" : "s"}` : "units";
+    return {
+      code: "package_quantity_gt_1",
+      reason: `package quantity ${normalizedQuantity} ${quantityUnit} exceeds single-unit scope`
+    };
+  }
+
+  for (const rule of MULTI_UNIT_SCOPE_PATTERNS) {
+    if (rule.pattern.test(normalizedProductName)) {
+      return {
+        code: rule.code,
+        reason: rule.reason
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseStrength(text: string): { value: number | null; unit: string | null; label: string } {
+  const values = Array.from(text.matchAll(/(\d+(?:\.\d+)?)\s*(mcg|ug|mg|g|ml|l|oz|fl\s*oz)\b/gi));
+  if (values.length === 0) {
+    return {
+      value: null,
+      unit: null,
+      label: "Standard"
+    };
+  }
+
+  const strongest = values[0];
+  const value = Number(strongest[1]);
+  const unit = strongest[2].toLowerCase().replace(/\s+/g, " ");
+
+  const label = `${value}${unit}`.replace(" ", "");
+
+  return {
+    value,
+    unit,
+    label
+  };
+}
+
+export function parseProductName(productName: string): ParsedProductName {
+  const normalizedName = normalizeWhitespace(productName);
+  const strength = parseStrength(normalizedName);
+  const packageInfo = parsePackageQuantity(normalizedName);
+  const formulation = detectFormulation({
+    productName: normalizedName,
+    strengthUnit: strength.unit,
+    packageUnit: packageInfo.unit
+  });
+
+  const sizeLabel =
+    strength.value && strength.unit
+      ? `${strength.value}${strength.unit}`
+      : packageInfo.quantity && packageInfo.unit
+        ? `${packageInfo.quantity} ${packageInfo.unit}`
+        : "Standard";
+
+  return {
+    compoundRawName: inferCompoundRawName(normalizedName),
+    formulationCode: formulation.code,
+    formulationLabel: formulation.label,
+    displaySizeLabel: sizeLabel,
+    strengthValue: strength.value,
+    strengthUnit: strength.unit,
+    packageQuantity: packageInfo.quantity,
+    packageUnit: packageInfo.unit
+  };
+}
+
+export function toNormalizedVariant(parsed: ParsedProductName): NormalizedVariant {
+  return {
+    formulationCode: parsed.formulationCode,
+    displaySizeLabel: parsed.displaySizeLabel,
+    strengthValue: parsed.strengthValue,
+    strengthUnit: parsed.strengthUnit,
+    packageQuantity: parsed.packageQuantity,
+    packageUnit: parsed.packageUnit,
+    totalMassMg: null,
+    totalVolumeMl: null,
+    totalCountUnits: null
+  };
+}
+
+export function extractPriceCents(raw: string): number | null {
+  const cleaned = raw.replace(/,/g, "");
+  const matches = cleaned.match(/\$(\d+(?:\.\d{1,2})?)/);
+  if (!matches) {
+    return null;
+  }
+
+  const value = Number(matches[1]);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.round(value * 100);
+}
+
+export function isInStock(text: string): boolean {
+  const lowered = text.toLowerCase();
+  return !/out of stock|sold out|unavailable|backorder/.test(lowered);
+}
+
+export function buildExtractedOffer(input: {
+  vendorPageId: string;
+  vendorId: string;
+  pageUrl: string;
+  productUrl: string;
+  productName: string;
+  priceCents: number;
+  payload?: Record<string, unknown>;
+  availabilityText?: string;
+}): ExtractedOffer {
+  const normalizedProductName = normalizeWhitespace(input.productName);
+  const parsed = parseProductName(normalizedProductName);
+
+  return {
+    vendorPageId: input.vendorPageId,
+    vendorId: input.vendorId,
+    pageUrl: input.pageUrl,
+    productUrl: input.productUrl,
+    productName: normalizedProductName,
+    compoundRawName: parsed.compoundRawName,
+    formulationRaw: parsed.formulationCode,
+    sizeRaw: parsed.displaySizeLabel,
+    currencyCode: "USD",
+    listPriceCents: input.priceCents,
+    available: isInStock(input.availabilityText ?? input.productName),
+    rawPayload: {
+      parsed,
+      ...input.payload
+    }
+  };
+}

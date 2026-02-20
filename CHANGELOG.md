@@ -1,0 +1,489 @@
+# Changelog
+
+All notable changes to Stack Tracker are documented in this file.
+
+## [Unreleased]
+
+### Added
+- General app CI workflow:
+  - `.github/workflows/app-ci.yml` runs `npm ci`, `npm run db:bootstrap`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` on PR/push.
+- Next.js App Router MVP scaffold with public pages:
+  - Homepage (`/`) with floating nav, hero, top-five cards, vendor tables.
+  - Peptide detail template (`/peptides/[slug]`) with trend chart, variant switching, and pagination.
+- Admin surface and workflows:
+  - Magic-link auth endpoints and admin pages.
+  - Review queue resolution actions.
+  - Featured compounds management.
+  - Vendor aggressive re-scrape queue.
+- Public API endpoints:
+  - `GET /api/home`
+  - `GET /api/compounds/:slug`
+  - `GET /api/compounds/:slug/offers`
+  - `GET /api/compounds/:slug/trend`
+- Internal job endpoints:
+  - `GET|POST /api/internal/jobs/vendors`
+  - `GET|POST /api/internal/jobs/finnrick`
+- Scraping and normalization pipeline:
+  - Rules-first alias matching with confidence.
+  - Formulation-aware parsing and metric computation.
+  - Offer history/versioning behavior for unchanged vs changed records.
+  - Safe-mode robots handling + AI-agent fallback task queue.
+- Data model and SQL:
+  - Full schema in `sql/schema.sql`.
+  - Seed data in `sql/seed.sql` including initial three vendor URLs.
+  - Seed expansion now includes four vetted storefront batches (45 active vendors / 53 active vendor pages total).
+- Operations and tooling:
+  - `npm run db:bootstrap` to apply schema + seed without direct `psql` usage.
+  - Job scripts load `.env.local` via `--env-file-if-exists`.
+  - Vercel cron configuration in `vercel.json`.
+- Documentation:
+  - Product requirements in `PRD.md`.
+  - Handoff/restart instructions in `HANDOFF.md`.
+  - Updated runbook in `README.md`.
+  - Vendor onboarding notes for US-direct-storefront scope and platform/API verification.
+- Category browsing routes:
+  - `GET /categories`
+  - `GET /categories/:slug`
+- Vendor offering route:
+  - `GET /vendors/:slug`
+- Admin category management API:
+  - `POST /api/admin/categories`
+- Vendor audit utility script:
+  - `scripts/finnrick-vendor-audit.js` for Finnrick vendor extraction, filtering, website discovery, platform detection, and API probing.
+- Single-vendor exclusion audit utility:
+  - `scripts/run-single-vendor-exclusion-audit.ts` plus `npm run job:exclusion-audit`.
+  - Produces report-only JSON/Markdown snapshots in `reports/exclusion-audit/` and marks every candidate as manual-confirmation-required (no automatic exclusion enforcement).
+- Single-vendor exclusion enforcement utility:
+  - `scripts/run-single-vendor-exclusion-enforcement.ts` plus `npm run job:exclusion-enforce`.
+  - Compiles only reviewer-approved exclusions (`manualDecision.status='approved_exclusion'`) into `config/manual-offer-exclusions.json`.
+- DB maintenance script:
+  - `sql/maintenance/cleanup-legacy-peptides.sql` for safe cleanup of legacy `public.peptides` table (preflight, backup, dependency checks, guarded drop).
+- Category import script:
+  - `scripts/import-compound-categories.ts` plus `npm run db:import-categories` for curated category upsert/mapping with multi-category support.
+  - Import flow now seeds missing compounds from the curated taxonomy list before mapping.
+- Regression tests for category behavior:
+  - `tests/unit/category-queries.test.ts` validates active-variant guards in category DB queries.
+  - `tests/unit/categories-page.test.ts` validates `/categories` metric fallback/preservation and category link rendering.
+- Alias normalization regression tests:
+  - `tests/unit/alias-normalize.test.ts` validates descriptor stripping for dosage/formulation suffixes while preserving ambiguous blend terms.
+  - Expanded coverage now validates storefront-noise stripping, blend/stack detection, retatrutide shorthand inference, and non-product listing detection.
+- HTML extraction regression test:
+  - `tests/unit/extractors.test.ts` now validates Inertia `data-page` extraction for product+variant payloads.
+  - `tests/unit/extractors.test.ts` now also validates PrestaShop-style listing extraction (`li.ajax_block_product` / `.product-miniature`).
+- Product-name normalization regression test:
+  - `tests/unit/normalize.test.ts` now validates storefront-noise stripping during inferred alias extraction.
+  - `tests/unit/normalize.test.ts` now also validates deterministic single-unit-offer scope filtering (bulk/pack/kit/multi-vial exclusions plus single-vial inclusion).
+- Discovery/runtime regression tests:
+  - `tests/unit/discovery.test.ts` now validates per-origin API cache reuse and unsupported-origin memoization.
+  - `tests/unit/worker-alerts.test.ts` validates batched alias-alert HTML formatting/truncation.
+- Expanded alias regression coverage:
+  - `tests/unit/alias-normalize.test.ts` now validates additional tirzepatide shorthand variants (`GLP2-T`, `GLP-2TZ`, `GLP1-T`, `GLP-2 (T)`), CJC no-DAC Mod-GRF phrasing, and new cosmetic/non-product patterns.
+  - `tests/unit/alias-normalize.test.ts` now also validates canonical numeric-token preservation (`BPC-157` dosage-choice tails) and batch-note/kit storefront-noise stripping (`Current batch tested at ...`, `Air Dispersal Kit`).
+- Expanded-run robustness report:
+  - `reports/robustness/expanded-vendor-robustness-2026-02-16.md` with per-vendor ingest/alias metrics, queue deltas, and zero-offer diagnostics.
+- Top-compound coverage smoke script:
+  - `scripts/run-top-compounds-smoke-test.ts` plus `npm run job:smoke-top-compounds`.
+  - Compares current top-compound vendor coverage against latest stored baseline and exits non-zero on threshold breaches.
+- Quality-guardrail regression tests:
+  - `tests/unit/quality-guardrails.test.ts` validates invariant, drift, smoke pass/fail, and summary parsing logic.
+- Worker no-offers regression tests:
+  - `tests/unit/worker-no-offers.test.ts` validates `INVALID_PRICING_PAYLOAD` emission and preserved `NO_OFFERS` behavior.
+  - `tests/unit/worker-no-offers.test.ts` now also validates provider-aware safe-mode access-block classification (`safe_mode_access_blocked` plus Cloudflare compatibility) and pre-aggregation single-unit exclusion behavior.
+  - `tests/unit/worker-no-offers.test.ts` now also validates `NETWORK_FILTER_BLOCKED` classification and metadata capture for deterministic network-filter redirects.
+  - `tests/unit/worker-no-offers.test.ts` now also validates repeated deterministic `NETWORK_FILTER_BLOCKED` queue-suppression behavior (skip duplicate parse-failure row, preserve event visibility).
+- Peptide page regression tests:
+  - `tests/unit/peptide-page.test.ts` validates selected-variant average/low/high price summary rendering.
+- Smoke-coverage hydration helpers and regression tests:
+  - `getMissingSmokeCoverageSlugs` + `mergeCoverageSnapshots` in `lib/scraping/quality-guardrails.ts`.
+  - `tests/unit/quality-guardrails.test.ts` coverage for baseline-tracked slug hydration/merge behavior.
+- Shared safe-mode/access-block helpers:
+  - `lib/scraping/access-blocks.ts` now centralizes provider detection/parsing for Cloudflare/Imperva/Akamai/DataDome challenge responses.
+- Log/event secret-redaction utility:
+  - `lib/security/redaction.ts` with regression coverage in `tests/unit/redaction.test.ts`.
+- Security CI workflow:
+  - `.github/workflows/security-ci.yml` adds full-history `gitleaks` scanning and high/critical dependency gating via `npm audit --audit-level=high`.
+- Security dependency policy assets:
+  - `SECURITY.md` now documents release gates, SLA targets, and exception governance for dependency advisories.
+  - `security/moderate-advisory-exceptions.json` tracks owner/ticket/expiry for approved dev-only moderate advisories.
+  - `scripts/security/enforce-moderate-advisories.mjs` validates exception coverage/expiry against `npm audit --json`.
+
+### Changed
+- MVP single-unit scope enforcement is now active at ingestion:
+  - bulk/pack/kit/multi-vial offers are excluded deterministically before alias/variant/price persistence.
+  - excluded offers emit `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT`.
+- Lint/security tooling modernization (`2026-02-20`):
+  - replaced `next lint` with `oxlint` (`npm run lint` now executes `oxlint . --ignore-pattern next-env.d.ts --deny-warnings`);
+  - removed `eslint` and `eslint-config-next` from dev dependencies to eliminate the ESLint/AJV moderate advisory chain;
+  - set `next.config.ts` `eslint.ignoreDuringBuilds=true` so `next build` does not require ESLint;
+  - cleaned `security/moderate-advisory-exceptions.json` to `0` active exceptions after advisories cleared.
+- Woo discovery pricing precedence now uses storefront-rendered sale values from `price_html` when API numeric fields are stale (for example Eros `S 20MG` now resolves to `$95.99` instead of stale `$119.99`).
+- Compound display naming was normalized for CJC-with-DAC:
+  - canonical `cjc-1295-with-dac-and-ipa` now displays as `CJC-1295 with DAC` while preserving legacy alias matching.
+- Floating nav category selector now routes to category pages before compound selection.
+- Admin home now shows active compounds missing a primary category assignment.
+- Peptide vendor-name links now route internally to vendor catalog pages, with external offer links retained.
+- Added admin category editor workflow with multi-category and primary-category assignment controls.
+- Vendor catalog page now shows simplified "Last updated" time in user locale with UTC fallback.
+- Category import flow now seeds curated taxonomy compounds and supports split multi-category mappings (e.g., `Longevity / Mitochondrial`).
+- Improved environment handling for local and production-first setup:
+  - Added `DATABASE_PREPARE` toggle.
+  - Documented Supabase/Vercel-first deployment path.
+- Hardened parsing logic for capsule plural detection (`capsules`).
+- Discovery strategy is now explicitly API-first with a documented vendor onboarding flow:
+  - Prioritize WooCommerce Store API and Shopify public product feeds.
+  - Restrict target list to US-facing direct storefront vendors.
+  - Treat contact-to-order and non-storefront domains as excluded.
+- Vendor onboarding verification log expanded with latest batch outcomes:
+  - Additional Woo/Shopify/Wix storefront URLs confirmed.
+  - Clinic-based, closed, and domain-for-sale providers explicitly marked excluded in docs.
+  - Follow-up list documented for unresolved vendor URLs.
+- Bootstrap schema now explicitly creates the one-primary-category partial unique index:
+  - `compound_category_map_one_primary_per_compound`.
+- Category browsing query behavior now aligns with selector behavior by requiring active variants.
+- Admin category editor save workflow now catches network/fetch failures and surfaces an explicit row-level error.
+- HTML discovery now parses Inertia `#app[data-page]` payloads and converts embedded product/variant records into offers (fixes coverage gaps on custom storefronts like `eliteresearchusa.com`).
+- HTML discovery now also parses Wix `#wix-warmup-data` payloads for storefronts that expose catalog data only via Thunderbolt warmup JSON.
+- HTML discovery now retries empty seeded paths against vendor root URL (same-origin fallback), which stabilizes `eliteresearchusa.com/products`.
+- Discovery and HTML-fetch calls now include transient retry/backoff handling for timeout/connection-reset paths.
+- Alias resolution now attempts deterministic stripped-name matching (removing dosage/formulation descriptors like `10mg`, `vial`, `capsules`) before falling back to AI/review, improving auto-match coverage when base compounds already exist.
+- Alias normalization now strips storefront noise (for example prices and CTA fragments like `add to cart`) before deterministic and AI matching.
+- Blend/stack and non-product listing aliases are auto-skipped for single-compound tracking integrity.
+- Added deterministic retatrutide shorthand fallback matching (`RT`, `GLP-3`, `NG-1 RT` context) to reduce avoidable review queue load.
+- Added deterministic shorthand fallback matching for:
+  - Tirzepatide (`TZ`, `tirz`, `GLP-1 TZ`, `NG-TZ`, `ER-TZ` context).
+  - Cagrilintide (`Cag`, `Cagrilinitide` misspelling context).
+- Tirzepatide shorthand matching now also covers `GLP2-T`, `GLP-2TZ`, `GLP1-T`, and parenthesized `GLP-2 (T)` forms.
+- Added deterministic semaglutide shorthand matching for `GLP1-S`, `GLP-1 (S)`, and `GLP1`.
+- Added deterministic single-letter GLP shorthand matching for dose-coded aliases:
+  - `R ... mg` -> `retatrutide`
+  - `S ... mg` -> `semaglutide`
+  - `T ... mg` -> `tirzepatide`
+- Added regression guards for single-letter GLP shorthand so no-unit/non-`mg` forms (for example `R 30`, `S 10mcg`, `T 60mcg`) do not auto-match.
+- Added deterministic CJC-with-DAC alias normalization guard and HTML-entity stripping so titles like `CJC-1295 &#8211; With DAC (10mg)` resolve safely.
+- Added deterministic CJC no-DAC alias normalization for Mod-GRF phrasing (for example `CJC-1295 no DAC ... (Mod GRF 1-29)`).
+- Added deterministic mapping for cosmetic peptide aliases:
+  - `Acetyl Hexapeptide-8 (Argireline)` -> `argireline`
+  - `Pal Tetrapeptide-7 (Matrixyl 3000)` -> `pal-tetrapeptide-7`
+- Alias descriptor stripping now removes generic `peptide` suffixes and pack-count descriptor tails (for example `10 vials`) before deterministic matching.
+- Alias descriptor stripping now preserves canonical numeric identity tokens while still removing dosage-choice tails (for example `BPC-157 Peptide 5mg/10mg/20mg` -> `bpc 157`).
+- Storefront-noise stripping now removes batch-note and kit phrasing (`Current batch tested at ...`, `with Air Dispersal Kit`) before deterministic/AI matching.
+- Expanded curated taxonomy seeds/mappings to include `Tirzepatide`, `Cagrilintide`, and `LL-37` canonical coverage.
+- Vendor seed targets now include `https://eliteresearchusa.com/products` in addition to the site root.
+- Vendor seed targets now include the first 10-vendor expansion batch from the vetted storefront list in `README.md`.
+- Vendor seed targets now include a second vetted 5-vendor expansion batch from the same vetted storefront list:
+  - `https://evolvebiopep.com/`
+  - `https://purapeptides.com/`
+  - `https://nusciencepeptides.com/`
+  - `https://peptides4research.com/`
+  - `https://atomiklabz.com/`
+- Vendor seed targets now include a third vetted 12-vendor expansion batch from the same vetted storefront list:
+  - `https://peptiatlas.com/`
+  - `https://purerawz.co/`
+  - `https://peptidecrafters.com/`
+  - `https://biolongevitylabs.com/`
+  - `https://lotilabs.com/`
+  - `https://nexaph.com/`
+  - `https://erospeptides.com/`
+  - `https://www.biopepz.net/`
+  - `https://purepeps.com/`
+  - `https://hkroids.com/`
+  - `https://reta-peptide.com/`
+  - `https://swisschems.is/`
+- Vendor seed targets now include a fourth vetted 8-vendor expansion batch from the same vetted storefront list:
+  - `https://precisionpeptideco.com/`
+  - `https://aminoasylumllc.com/`
+  - `https://elitepeptides.com/`
+  - `https://peptidesworld.com/`
+  - `https://amplifypeptides.com/`
+  - `https://peptidesupplyco.org/`
+  - `https://trustedpeptide.net/`
+  - `https://crushresearch.com/`
+- Historical candidate entries marked non-legitimate or unresolved were removed from onboarding scope:
+  - `Amino Lair`
+  - `UWA Elite Peptides`
+  - `Peptide Worldwide`
+  - `Amplified Amino`
+  - `PurePeptides`
+- Vendor targeting for known root-page gaps now points at parseable storefront paths:
+  - `https://www.alphagresearch.com/shop-1`
+  - `https://dragonpharmastore.com/64-peptides`
+- Compound seed set now includes additional legitimate compounds discovered during expansion triage (including `semaglutide`, `cagrisema`, `thymalin`, `mazdutide`, `survodutide`, and related canonicals).
+- Runtime/docs now clarify Codex execution requirement for networked jobs: restricted sandbox can produce false DNS `ENOTFOUND`, full-access mode resolves this without app-code changes.
+- Vendor scrape runtime now batches unresolved-alias admin alerts per page (instead of per alias) and wraps alert delivery with a timeout guard to prevent ingestion stalls.
+- Discovery now caches Woo/Shopify API results per origin and records source-origin reuse; duplicate API-origin pages in the same run skip redundant offer persistence.
+- Vendor cron cadence was updated from every 6 hours to every 24 hours (`vercel.json` now schedules `/api/internal/jobs/vendors` daily at `00:00` UTC).
+- Vendor scrape runtime now emits page-level progress logs (start/completion + per-page deltas) so long-running runs remain observable in stdout.
+- Vendor scrape runtime now emits per-page timing splits (`discoveryWait`, `aliasDet`, `aliasAi`, `dbPersist`) and run-level timing totals for source/network, alias classification path, and DB persistence phases.
+- Peptide detail hero subhead now includes live coverage counts (`vendors` and `variations`) for the current compound.
+- `scrape_runs` now stores `heartbeat_at` and jobs maintain heartbeat updates while running.
+- Added stale-run reconciliation for scrape jobs: aged `running` runs are marked `failed` after TTL at job start.
+- Added lag-alert events/email when heartbeat inactivity exceeds configured threshold.
+- Vendor scrape worker now uses bounded page concurrency (`VENDOR_SCRAPE_CONCURRENCY`, default `2`, max `3`).
+- Discovery probing remains fallback-ordered per page (`WooCommerce API -> Shopify API -> HTML -> Firecrawl`) as an intentional rate-limit/reliability tradeoff while page workers run in parallel.
+- Added optional runtime controls in env (`VENDOR_SCRAPE_CONCURRENCY`, `SCRAPE_RUN_STALE_TTL_MINUTES`, `SCRAPE_RUN_HEARTBEAT_SECONDS`, `SCRAPE_RUN_LAG_ALERT_SECONDS`).
+- `job:review-ai` now emits queue progress logging for large scans.
+  - Progress logs now include elapsed time, processing rate, ETA, and last outcome/reason context.
+- `job:review-ai` now supports bounded queue slices via `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled triage runs.
+- Non-trackable supplement aliases with `pre-workout` phrasing are now deterministically auto-ignored to reduce repeated unresolved queue items.
+- Non-product heuristic coverage now includes cosmetic/noise patterns seen in expansion runs (for example dissolving strips, body cream, hair-growth formulations, conditioner, eye-glow, t-shirt).
+- Added automated operational-noise retention pruning in vendor runs:
+  - Deletes aged `review_queue` rows with `status in ('resolved','ignored')` after `REVIEW_QUEUE_RETENTION_DAYS` (default `45`).
+  - Deletes aged non-trackable alias memory (`compound_aliases` where `compound_id is null` and `status='resolved'`) after `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`).
+- Vendor ingestion now supports manual exclusion-rule enforcement by exact product URL:
+  - Loads active rules from `config/manual-offer-exclusions.json`.
+  - Skips persisting matching offers (`OFFER_EXCLUDED_RULE`) and deactivates existing rows for those URLs.
+- AI classifier fallback reliability was hardened:
+  - Long `reason` outputs no longer fail local parsing (truncated safely to 200 chars).
+  - Chat-completions fallback removed unsupported `temperature=0` for `gpt-5-mini`.
+- `job:review-ai` now refreshes payload metadata for items left open after triage:
+  - Updates reason/confidence and triage timestamp so unresolved reason-group reporting reflects current classification outcomes.
+- Cached alias handling for `needs_review` entries now re-checks deterministic rules before returning `ai_review_cached`, enabling queue burn-down without repeated AI calls when heuristics improve.
+- Deterministic blend/stack skip path is now constrained to explicit blend markers to reduce false-ignore risk from dosage-option slash notation.
+- Formulation inference now defaults mass-unit peptide listings without explicit non-vial form factors (for example `BPC-157 10mg`) to `vial`.
+- Offer upsert now reconciles by `(vendor_id, product_url)` fallback to avoid duplicate active rows when normalization changes variant keys (`other` -> `vial`).
+- Vendor runtime now evaluates and persists quality guardrails per run (`scrape_runs.summary.qualityGuardrails`):
+  - `bpc-157` `10mg` vial-share invariant
+  - run-over-run vial-share drift alerts
+  - top-compound vendor-coverage smoke checks
+- Vendor runs now fail when critical quality guardrails fail; drift-only signals remain warning alerts.
+- Added runtime quality-threshold env controls:
+  - `QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS`
+  - `QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE`
+  - `QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP`
+  - `TOP_COMPOUND_SMOKE_LIMIT`
+  - `TOP_COMPOUND_SMOKE_MIN_BASELINE_VENDORS`
+  - `TOP_COMPOUND_SMOKE_MAX_VENDOR_DROP_PCT`
+- Woo zero-priced payload handling now emits explicit diagnostics:
+  - Discovery identifies payloads with product candidates but only zero/empty price fields.
+  - Worker emits `INVALID_PRICING_PAYLOAD` (with sampled product/price-field context) and marks page status `no_data_invalid_pricing`.
+  - True empty/no-catalog paths retain existing `NO_OFFERS` flow.
+- Safe-mode access-block handling is now provider-aware and reusable:
+  - `HTTP 403` safe-mode challenge responses are tagged `safe_mode_access_blocked` with provider/status diagnostics.
+  - Cloudflare responses retain compatibility tags (`safe_mode_cloudflare_blocked`) plus `cf-ray` diagnostics in `DISCOVERY_ATTEMPT_FAILED` and `NO_OFFERS` payloads.
+- Documentation now reflects active scope state:
+  - MVP single-unit/single-vial enforcement is active.
+  - Bulk-pack economics and normalization remain deferred to v2.
+- Peptide detail pages now show selected-variant pricing summary:
+  - `Average price of <size> <formulation> of <compound>`
+  - `Low` / `High` for the same selected variant.
+- Top-compound smoke evaluation now hydrates missing baseline slugs:
+  - Vendor guardrail evaluation and standalone smoke script now fetch current coverage for baseline-tracked compounds that fall outside current top-`N` ranking before computing smoke drops.
+  - Prevents false zero-coverage failures when ranking churn drops a still-covered compound out of the current top snapshot (for example `thymosin-alpha-1` in run `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`).
+- Discovery transport-failure handling is now explicit:
+  - full-source network failures are classified as `NETWORK_FILTER_BLOCKED` with parse-failure reason `network_filter_blocked` when deterministic Meraki blocked redirects are detected;
+  - fallback classification remains `DISCOVERY_FETCH_FAILED` with parse-failure reason `discovery_fetch_failed` when no blocked-site fingerprint is available;
+  - worker retries discovery once before fallback when this pattern occurs;
+  - parse-failure payloads include structured source/error arrays (`discoveryFetchFailedSources`, `discoveryFetchFailedErrors`) plus blocked-site metadata (`networkFilterProvider/category/location/server/url/status/probeUrl`).
+- Parse-failure queue creation now dedupes open/in-progress rows by `(vendor_id, page_url)` and refreshes payload metadata in place.
+- Deterministic `network_filter_blocked` queue handling now supports hybrid suppression:
+  - blocked signatures are fingerprinted via `networkFilterSignature`;
+  - repeated identical signatures on triaged `(vendor_id, page_url)` rows are suppressed for `NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS` (default `14`);
+  - event visibility is preserved with `networkFilterSignature` + `parseFailureQueueSuppressed` metadata.
+- Finnrick rating ingestion/display now uses Finnrick textual `Ratings range` labels end-to-end:
+  - parser reads dedicated `Ratings range` table column and normalizes values like `A`, `A to C`, `N/A`;
+  - home/peptide/vendor queries now source `finnrick_ratings.rating_label`;
+  - UI badges now render range labels directly instead of numeric formatting.
+- Discovery error payloads now preserve nested cause/code context (for example `fetch failed | read ECONNRESET | code=ECONNRESET`) instead of opaque `fetch failed`.
+- Guardrail summary snapshots now persist hydrated smoke coverage (`topCompoundCoverageSnapshot` uses hydrated smoke set) so baseline continuity preserves prior tracked slugs.
+- Runtime least-privilege credential model now supports:
+  - `DATABASE_RUNTIME_USER` assertion for runtime DB user wiring;
+  - `DATABASE_ADMIN_URL` split credential path for bootstrap/import scripts.
+- Dependency baseline patched for known Next.js CVEs:
+  - upgraded `next` and `eslint-config-next` from `15.1.6` to `15.5.12`.
+- Security vulnerability-gate remediation (2026-02-20):
+  - upgraded `vitest` and `@vitest/coverage-v8` to `4.0.18`;
+  - added npm override `minimatch: ^10.2.2` to clear high-severity transitive `minimatch` advisories in lint/test dependency chains;
+  - retained `next`/runtime ingestion dependencies unchanged.
+- Security CI dependency gate is now policy-driven:
+  - keeps hard fail on `high/critical` advisories across all dependencies;
+  - adds hard fail on `moderate+` advisories in production dependency graph (`npm audit --omit=dev --audit-level=moderate`);
+  - enforces tracked, non-expired exceptions for any remaining dev-only moderates.
+
+### Verified
+- Security CI remediation validation completed:
+  - local verification passed: `npm run typecheck`, `npm run lint`, `npm run test`, `npm audit --audit-level=high`.
+  - commit `47fe6997ac03d1edb23914d8a4a04c60377908d1` pushed to `codex/mvp-scaffold`.
+  - `Security CI` run `22238481016` passed both jobs:
+    - `Secret Scan (gitleaks)` pass
+    - `Dependency Vulnerability Gate` pass (`high=0`, `critical=0`; log shows `9` moderate advisories)
+- Security policy-governance validation completed:
+  - local verification passed: `npm audit --audit-level=high`, `npm audit --omit=dev --audit-level=moderate`, `npm run security:check-moderates`, `npm run typecheck`, `npm run lint`, `npm run test`.
+  - commit `5d7b105f55195f48757a25fc0d0106f21ab67ca5` pushed to `codex/mvp-scaffold`.
+  - `Security CI` run `22239142426` passed both jobs:
+    - `Secret Scan (gitleaks)` pass
+    - `Dependency Vulnerability Policy Gate` pass (high/critical gate pass, production-moderate gate pass, moderate-exception enforcement pass)
+- Security documentation synchronization validation completed:
+  - commit `6b8f2b82c9f87a1f9580f172f262afed6403ed76` pushed to `codex/mvp-scaffold`.
+  - `Security CI` run `22239230993` passed both jobs:
+    - `Secret Scan (gitleaks)` pass
+    - `Dependency Vulnerability Policy Gate` pass.
+- Robustness-cycle rerun was intentionally skipped in this pass because remediation touched only dev-toolchain/transitive dependencies (no runtime scraper/job code changes).
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`80` tests)
+  - `npm run job:vendors` -> `89043ac0-e797-49c2-9755-7f928a203c6a` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `89043ac0-e797-49c2-9755-7f928a203c6a`)
+- Latest run failure profile (`89043ac0-e797-49c2-9755-7f928a203c6a`):
+  - `21` pages with `NETWORK_FILTER_BLOCKED`
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Live suppression validation:
+  - vendor-scoped run `c1f47324-133c-4ff5-826f-a98f82392fa4` emitted `NETWORK_FILTER_BLOCKED` with `parseFailureQueueSuppressed=true`;
+  - no new open parse-failure row was created for the triaged `https://aminoasylumllc.com/` signature.
+- Parse-failure queue snapshot after rerun + live suppression check:
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+  - open `discovery_fetch_failed=0` (prior `elitepeptides.com` outlier reclassified/triaged).
+- Finnrick rerun + label audit:
+  - `npm run job:finnrick` -> `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`)
+  - latest-per-vendor Finnrick labels now contain `0` numeric-style values (`x/5`), confirming range-label migration.
+- Security CI remote validation (post-push):
+  - run `22237905231` on `codex/mvp-scaffold`;
+  - `Secret Scan (gitleaks)` passed;
+  - `Dependency Vulnerability Gate` failed on `npm audit --audit-level=high` (`20` vulnerabilities: `1` moderate, `19` high; `ajv`/`minimatch` advisories via ESLint-related chains).
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`79` tests)
+  - `npm run job:vendors` -> `99ba0dab-5eec-4836-a078-44eb46a1d835` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `99ba0dab-5eec-4836-a078-44eb46a1d835`)
+- Latest run failure profile (`99ba0dab-5eec-4836-a078-44eb46a1d835`):
+  - `20` pages with `NETWORK_FILTER_BLOCKED`
+  - `1` page with `DISCOVERY_FETCH_FAILED` (`https://elitepeptides.com/`)
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Parse-failure queue snapshot after latest run:
+  - `open=22` (`network_filter_blocked=20`, `discovery_fetch_failed=1`, `invalid_pricing_payload=1`)
+- `network_filter_blocked` metadata quality after latest run:
+  - signature coverage `20/20` (`payload.networkFilterSignature` populated)
+- Security CI remote validation status update:
+  - `gh auth status` is authenticated with `repo` + `workflow` scopes;
+  - remote `belmead/stacktracker` currently has no Actions workflows/runs, so `Security CI` run/log validation remains blocked until workflow files are pushed.
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`78` tests)
+  - `npm audit --audit-level=high` pass (`0` vulnerabilities)
+  - `npm run job:vendors` -> `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`)
+- Latest run failure profile (`2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`):
+  - `20` pages with `NETWORK_FILTER_BLOCKED` classification (all-source transport failures with deterministic Meraki `blocked.cgi` redirects)
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Parse-failure queue snapshot after latest run:
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+- Metadata-quality checks:
+  - `network_filter_blocked` open rows are metadata-complete (`20/20` with provider/category/location populated)
+  - no open `safe_mode_cloudflare_blocked` rows remain (`0/0`)
+- GitHub Actions security-workflow runtime verification:
+  - blocked in this environment due missing authenticated `gh` session (`gh auth login` required to inspect remote run status/logs).
+  - local dependency vulnerability gate remains clean (`npm audit --audit-level=high` => `0` vulnerabilities).
+- One-time parse-failure dedupe cleanup:
+  - open rows before cleanup: `96`
+  - historical duplicates marked `ignored` with `resolved_by='system_parse_failure_dedupe'`: `71`
+  - open rows after cleanup: `25`
+- Legacy parse-failure cleanup in this pass:
+  - resolved/ignored 4 stale `no_offers_found` rows for remediated/historical targets (`open parse_failure 25 -> 21`).
+- Finnrick sync rerun in this pass:
+  - `npm run job:finnrick` -> `084b323c-6472-4554-b11f-d0aa19f0889c` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
+- Latest vendor onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) completed ingestion and then failed guardrails with:
+  - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
+  - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
+  - `offersExcludedByRule=427`
+  - `unresolvedAliases=14`, `aliasesSkippedByAi=784`, `aiTasksQueued=2`
+  - guardrails `invariant=pass`, `drift=pass`, `smoke=fail`
+  - smoke fail detail: `thymosin-alpha-1` vendor coverage `24` -> `0` (`required=16`)
+- Latest passing guardrail baseline run remains `973e56fa-dd68-4a26-b674-c54cebad5b19` (`invariant=pass`, `drift=pass`, `smoke=pass`).
+- Post-fix robustness run (`425efba4-127e-4792-903d-8113bf45c206`) completed with:
+  - `status=partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails `invariant=pass`, `drift=pass`, `smoke=pass`
+- Historical smoke command verification (`npm run job:smoke-top-compounds`) for baseline `425efba4-127e-4792-903d-8113bf45c206` passed (`failureCount=0`).
+- Latest coverage snapshot:
+  - `45` active vendors
+  - `53` active vendor pages
+- Alias queue snapshot after manual adjudication and verification:
+  - `queue_type='alias_match'`: `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
+- Parse-failure queue snapshot after run `425efba4-127e-4792-903d-8113bf45c206`:
+  - `queue_type='parse_failure'`: `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
+- Parse-failure payload hygiene audit:
+  - Backfilled two legacy open cloudflare-block rows so blocked-site metadata is now complete on all open cloudflare-block entries (`3/3` include provider/status/source).
+- Run `425efba4-127e-4792-903d-8113bf45c206` failing-page signals:
+  - `Kits4Less` root page -> `NO_OFFERS` with `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403` challenge)
+  - `PeptiAtlas` root page -> `INVALID_PRICING_PAYLOAD` (Woo products with all-zero prices)
+- Storefront remediations verified:
+  - `Alpha G Research` now succeeds on `https://www.alphagresearch.com/shop-1`
+  - `Dragon Pharma Store` now succeeds on `https://dragonpharmastore.com/64-peptides`
+- New onboarding vendors (`batch 4`) are all scraping successfully (`lastStatus=success`):
+  - `Amino Asylum`, `Amplify Peptides`, `Crush Research`, `Elite Peptides`, `Peptide Supply Co`, `Peptides World`, `Precision Peptide Co`, `Trusted Peptide`
+- Passing checks under Node 20:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run test`
+- Latest robustness commands in this pass:
+  - `npm run typecheck` (pass)
+  - `npm run lint` (pass)
+  - `npm run test` (pass, `71` tests)
+  - `npm run job:vendors` (ingestion pass, then guardrail fail: `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`)
+  - `npm run job:review-ai -- --limit=200` (pass, `itemsScanned=14`, `resolved=0`, `ignored=0`, `leftOpen=14`)
+- Verified invalid-pricing behavior from live event stream:
+  - Run `2981b852-0b96-4c2b-9b68-57344bb8506e` emitted `INVALID_PRICING_PAYLOAD` for `https://peptiatlas.com/` with `productCandidates=59`, `candidatesWithPriceFields=59`, `candidatesWithPositivePrice=0`.
+- Verified networked ingestion execution in full-access mode:
+  - Stabilization run: `npm run job:vendors` completed with `scrapeRunId=783e2611-43ed-471f-b493-d572fa6fd49d` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=48`, `offersUpdated=0`, `offersUnchanged=1210`, `unresolvedAliases=4`, `aliasesSkippedByAi=679`, `aiTasksQueued=1`).
+  - Expanded run (third onboarding pass): `npm run job:vendors` completed with `scrapeRunId=9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
+  - Expanded run (second onboarding pass): `npm run job:vendors` completed with `scrapeRunId=37c41def-d773-4d16-9556-4d45d5902a3f` (`status=partial`, `pagesTotal=26`, `pagesSuccess=25`, `pagesFailed=1`, `offersCreated=274`, `offersUpdated=1`, `offersUnchanged=537`, `unresolvedAliases=16`, `aliasesSkippedByAi=339`).
+  - Expanded run: `npm run job:vendors` completed with `scrapeRunId=d515a861-ad68-4d28-9155-d2439bfe0f4a` (`status=partial`, `pagesTotal=21`, `pagesSuccess=20`, `pagesFailed=1`, `offersCreated=425`, `offersUnchanged=116`, `unresolvedAliases=73`, `aliasesSkippedByAi=231`).
+  - Expanded run: `npm run job:finnrick` succeeded with `scrapeRunId=5233e9be-24fb-42ba-9084-2e8dde507589` (`vendorsTotal=13`, `vendorsMatched=10`, `ratingsUpdated=10`, `notFound=3`).
+  - `npm run job:vendors` succeeded (`scrapeRunId=3178fe72-36db-4335-8fff-1b3fe6ec640a`, `pagesSuccess=10`, `pagesFailed=0`, `unresolvedAliases=0`, `offersUnchanged=116`, `offersExcludedByRule=0`).
+  - `npm run job:finnrick` succeeded (`scrapeRunId=8a108444-b26a-4f2a-94a9-347cc970a140`).
+- Verified expansion-cycle triage delta:
+  - Intermediate triage moved queue from `open=73`, `resolved=384`, `ignored=333` (post-vendor-run) to `open=43`, `resolved=396`, `ignored=351`.
+  - Intermediate delta: `open -30`, `resolved +12`, `ignored +18`.
+  - One bounded triage attempt failed with `canceling statement due to statement timeout`; subsequent reruns completed.
+  - Final follow-up triage + taxonomy onboarding closed the queue: `open=0`, `resolved=437`, `ignored=353`.
+  - Second expansion-cycle triage closed reopened queue `open=16` -> `open=0` with final totals `resolved=440`, `ignored=366`.
+  - Second-pass triage detail: first bounded run left all `16` open (`ai_review_cached`), deterministic normalization fixes resolved `3`, and manual adjudication ignored the final `13` branded/ambiguous aliases.
+  - Third expansion-cycle triage closed reopened queue `open=69` -> `open=0` with final totals `resolved=463`, `ignored=412`.
+  - Third-pass detail: repeated bounded/full `review-ai` scans initially stalled on cached-open aliases; single-letter GLP shorthand hardening resolved `23`, then manual adjudication ignored the final `44` branded/code aliases.
+  - Stabilization-rerun triage moved queue `open=4` -> `open=0` with final totals `resolved=463`, `ignored=416` (`+4 ignored`).
+  - Final cached-open aliases ignored in this pass: `FAT BLASTER`, `P21 (P021)`, `Livagen`.
+  - `GLP1-S` / `GLP-1 (S)` aliases now resolve to canonical `semaglutide`.
+  - `cagrisema` is currently retained as a tracked canonical blend compound.
+- Verified alias triage throughput run:
+  - `npm run job:review-ai` completed on `2026-02-15` with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516`, `real=420.01s`.
+  - Observed throughput: `82.86 items/min` (`~0.72s/item`), which is faster than the planning estimate (`~1.5s/item`) without code changes.
+  - Post-baseline key-enabled burn-down and adjudication closed the queue (`alias_match`: `open=0`, `in_progress=0`, `resolved=383`, `ignored=320`).
+- Verified bounded post-rerun triage delta:
+  - `npm run job:review-ai -- --limit=25` scanned `14` items and returned `resolved=1`, `ignored=1`, `leftOpen=12` (`durationSeconds=76.56`).
+  - Queue delta from rerun baseline (`open=0`, `resolved=383`, `ignored=320`) is now `open +12`, `resolved +1`, `ignored +1`.
+  - After classifier fix + reruns, unresolved queue moved to `open=7`, `resolved=384`, `ignored=326` with reason `ai_review_cached`.
+  - Final manual adjudication of those 7 items restored queue closure (`open=0`, `in_progress=0`, `resolved=384`, `ignored=333`).
+  - A follow-up vendor run (`3178fe72-36db-4335-8fff-1b3fe6ec640a`) completed with `unresolvedAliases=0`, confirming no immediate re-queue.
+- Verified quality-guardrail baseline run:
+  - `npm run job:vendors` completed with `scrapeRunId=fb5f63f0-a867-42ba-b9d3-92f450d8b2a7` and persisted `summary.qualityGuardrails`.
+  - Invariant `bpc157_10mg_vial_majority` passed (`vialOffers=20`, `totalOffers=21`, `vialShare=95.2%`).
+  - Follow-up verification run `8807da2b-e1d4-4ad9-93c0-15bf66999254` passed guardrails (`invariant=pass`, `drift=pass`, `smoke=pass`) against baseline `fb5f63f0-a867-42ba-b9d3-92f450d8b2a7`.
+  - `npm run job:smoke-top-compounds` passes with latest baseline snapshot `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`failureCount=0`).
+  - Strict normalized `bpc-157` `10mg` vial set now contains `20` active offers (including Elite `BPC-157 10mg`).
+- Remaining known no-offer edge cases are:
+  - `kits4less.com` safe-mode access challenge blocks (`safe_mode_access_blocked`, provider `cloudflare`).
+  - `peptiatlas.com` Woo zero-priced catalog payloads (`INVALID_PRICING_PAYLOAD` expected).
+- Verified manual resolution policy for vendor-exclusive noise:
+  - Elite branded one-off formulas plus `Peak Power` and currently single-vendor `MK-777` are intentionally excluded (`ignored`) until/if cross-vendor evidence appears.
+- Verified manual-ignore persistence hardening:
+  - Ignored review actions now persist admin non-trackable alias memory (`compound_aliases.status='resolved'`, `source='admin'`), reducing repeat queue churn on branded aliases.
+- Verified single-vendor exclusion audit bootstrap:
+  - Latest report (`reports/exclusion-audit/single-vendor-audit-latest.md`, `2026-02-16T01:01:59Z`) scanned `115` active offers across `50` active compounds.
+  - Found `23` single-vendor compounds (`28` offers) and classified all as manual-decision `pending`.
+  - No exclusions were enforced automatically; manual confirmation remains required before any rule application.
+- Verified manual exclusion enforcement bootstrap:
+  - `npm run job:exclusion-enforce` wrote `config/manual-offer-exclusions.json` from the latest audit report.
+  - With no approved entries yet, compiled exclusion rule count is `0` (safe no-op).
+- Verified ambiguous shorthand and malformed-title cases now resolve correctly:
+  - `GLP-1 TZ (10MG)` resolved to `tirzepatide`.
+  - `Cag (Cag (5MG))` resolved to `cagrilintide`.
+  - `LL-37` vendor `complex` phrasing resolves to canonical `ll-37`.
+  - `CJC-1295 &#8211; With DAC (10mg)` resolves to CJC with DAC after HTML-entity cleanup.

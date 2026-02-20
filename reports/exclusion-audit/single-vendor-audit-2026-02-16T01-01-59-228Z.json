@@ -1,0 +1,787 @@
+{
+  "generatedAt": "2026-02-16T01:01:59.228Z",
+  "totals": {
+    "activeOfferCount": 115,
+    "activeCompoundCount": 50,
+    "singleVendorCompoundCount": 23,
+    "singleVendorOfferCount": 28
+  },
+  "enforcement": {
+    "mode": "report_only",
+    "automaticEnforcement": false,
+    "manualConfirmationRequired": true,
+    "requiredChecks": [
+      "second_vendor_check_complete",
+      "not_a_valid_peptide_with_noisy_name",
+      "reviewer_identity_and_timestamp_recorded"
+    ]
+  },
+  "candidates": [
+    {
+      "compoundId": "bf2f77de-de92-493c-ade4-9be9290da5dd",
+      "compoundSlug": "bpc-157-kpv",
+      "compoundName": "BPC-157 + KPV",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "review_for_possible_exclusion",
+      "signals": {
+        "blendOrStackProduct": true,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "BPC-157 + KPV 1000mcg",
+          "productUrl": "http://eliteresearchusa.com/products/bpc-157-kpv?variant=8",
+          "listPriceCents": 18000,
+          "lastSeenAt": "2026-02-15T23:23:52.527Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "9751a983-4e29-4630-8197-73c2d7a0fcbe",
+      "compoundSlug": "glow-2-0",
+      "compoundName": "GLOW 2.0",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 2,
+      "recommendation": "review_for_possible_exclusion",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": true,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "GLOW 2.0 3mg",
+          "productUrl": "http://eliteresearchusa.com/products/glow-2?variant=76",
+          "listPriceCents": 22500,
+          "lastSeenAt": "2026-02-15T23:24:17.160Z"
+        },
+        {
+          "productName": "GLOW 2.0 50ml",
+          "productUrl": "http://eliteresearchusa.com/products/glow-2-50ml?variant=79",
+          "listPriceCents": 17000,
+          "lastSeenAt": "2026-02-15T23:24:16.490Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "067d339c-85fc-47da-8953-9af77719d542",
+      "compoundSlug": "illuminate",
+      "compoundName": "ILLUMINATE",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "review_for_possible_exclusion",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": true,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "ILLUMINATE 20ml",
+          "productUrl": "http://eliteresearchusa.com/products/illuminate?variant=107",
+          "listPriceCents": 13500,
+          "lastSeenAt": "2026-02-15T23:24:26.760Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "aba98bc8-2c49-413f-bac0-cf1d716b7591",
+      "compoundSlug": "lipo-c-b12",
+      "compoundName": "LIPO-C / B12",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "review_for_possible_exclusion",
+      "signals": {
+        "blendOrStackProduct": true,
+        "brandLikeName": false,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "LIPO-C / B12 20ml",
+          "productUrl": "http://eliteresearchusa.com/products/lipo-c-b12?variant=35",
+          "listPriceCents": 12000,
+          "lastSeenAt": "2026-02-15T23:24:35.223Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "7b4ad502-65d5-434a-986f-fed71ca1590b",
+      "compoundSlug": "thermogenix",
+      "compoundName": "THERMOGENIX",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "review_for_possible_exclusion",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": true,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "THERMOGENIX 20ml",
+          "productUrl": "http://eliteresearchusa.com/products/thermogenix?variant=111",
+          "listPriceCents": 13500,
+          "lastSeenAt": "2026-02-15T23:25:15.868Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "19f79e39-6ca8-41e7-a786-b358f473da16",
+      "compoundSlug": "ahk-cu",
+      "compoundName": "AHK-CU",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "AHK-CU 50mg",
+          "productUrl": "http://eliteresearchusa.com/products/ahk-cu?variant=84",
+          "listPriceCents": 4600,
+          "lastSeenAt": "2026-02-15T23:23:47.903Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "d3a22d09-b360-4984-80a8-ec5cb2e1c63a",
+      "compoundSlug": "bam-15",
+      "compoundName": "BAM-15",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "BAM-15 25mg",
+          "productUrl": "http://eliteresearchusa.com/products/bam-15?variant=5",
+          "listPriceCents": 7000,
+          "lastSeenAt": "2026-02-15T23:23:50.583Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "b13bc2f1-ecf7-4e74-92ec-3e107a1afe45",
+      "compoundSlug": "bromantane",
+      "compoundName": "BROMANTANE",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": false
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "BROMANTANE 30ml",
+          "productUrl": "http://eliteresearchusa.com/products/bromantane?variant=89",
+          "listPriceCents": 11000,
+          "lastSeenAt": "2026-02-15T23:23:53.162Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "1caf47aa-849f-48e7-96dc-d8eac75ccc03",
+      "compoundSlug": "cjc-1295-no-dac-with-ipa",
+      "compoundName": "CJC-1295 no DAC (with IPA)",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "CJC-1295 NO DAC+IPA 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/cjc-1295-no-dac-ipa?variant=14",
+          "listPriceCents": 7800,
+          "lastSeenAt": "2026-02-15T23:23:53.799Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "cb552e1e-c546-4a97-bf21-041d255d6d9f",
+      "compoundSlug": "cjc-1295-with-dac-and-ipa",
+      "compoundName": "CJC-1295 with DAC (and IPA)",
+      "vendor": {
+        "id": "bb9d5fb8-fe4d-4a29-90c0-5d475324ef12",
+        "slug": "peptide-labs-x",
+        "name": "Peptide Labs X"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "CJC-1295 &#8211; With DAC (10mg)",
+          "productUrl": "https://peptidelabsx.com/products/cjc-1295-with-dac-10mg/",
+          "listPriceCents": 7500,
+          "lastSeenAt": "2026-02-15T23:25:01.014Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "1f3ad94c-b2b2-4a6a-a124-2028089dd57e",
+      "compoundSlug": "foxo4-dri",
+      "compoundName": "FOXO4-DRI",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "FOXO4-DRI 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/foxo4-dri?variant=92",
+          "listPriceCents": 18500,
+          "lastSeenAt": "2026-02-15T23:24:13.874Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "7fa364dc-e6ba-4314-97f8-4f6b59685f8a",
+      "compoundSlug": "glutathione",
+      "compoundName": "GLUTATHIONE",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "GLUTATHIONE 1500mg",
+          "productUrl": "http://eliteresearchusa.com/products/glutathione?variant=28",
+          "listPriceCents": 5400,
+          "lastSeenAt": "2026-02-15T23:24:17.816Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "c6f85874-f03e-4a87-b693-9bcc41944502",
+      "compoundSlug": "gw-0742",
+      "compoundName": "GW-0742",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "GW-0742 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/gw-0742?variant=105",
+          "listPriceCents": 12000,
+          "lastSeenAt": "2026-02-15T23:24:18.468Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "0b8e0dea-fcd2-4150-bda6-f1c7bfc92fe2",
+      "compoundSlug": "kpv",
+      "compoundName": "KPV",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "KPV 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/kpv?variant=98",
+          "listPriceCents": 6000,
+          "lastSeenAt": "2026-02-15T23:24:33.896Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "023fffee-3e99-4aa2-86e0-90259507d3c0",
+      "compoundSlug": "ll-37",
+      "compoundName": "LL-37",
+      "vendor": {
+        "id": "bb9d5fb8-fe4d-4a29-90c0-5d475324ef12",
+        "slug": "peptide-labs-x",
+        "name": "Peptide Labs X"
+      },
+      "vendorCount": 1,
+      "offerCount": 2,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "LL-37 (5mg)",
+          "productUrl": "https://peptidelabsx.com/products/ll-37-5mg/",
+          "listPriceCents": 7500,
+          "lastSeenAt": "2026-02-15T23:24:51.814Z"
+        },
+        {
+          "productName": "LL-37 Complex (5mg)",
+          "productUrl": "https://peptidelabsx.com/products/ll-37-complex-5mg/",
+          "listPriceCents": 12000,
+          "lastSeenAt": "2026-02-15T23:24:51.027Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "759b611d-25ce-4fef-9758-f898f0dcaf08",
+      "compoundSlug": "melanotan-1",
+      "compoundName": "MELANOTAN 1",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "MELANOTAN 1 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/melanotan1?variant=78",
+          "listPriceCents": 4200,
+          "lastSeenAt": "2026-02-15T23:24:35.872Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "f35a3d64-ed90-4fd1-ae67-456b9db9a0a8",
+      "compoundSlug": "mk-677",
+      "compoundName": "MK-677",
+      "vendor": {
+        "id": "bb9d5fb8-fe4d-4a29-90c0-5d475324ef12",
+        "slug": "peptide-labs-x",
+        "name": "Peptide Labs X"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "MK-677 (25mg) x 30 Tablets",
+          "productUrl": "https://peptidelabsx.com/products/mk-677-25mg-x-30-tablets/",
+          "listPriceCents": 14000,
+          "lastSeenAt": "2026-02-15T23:24:49.851Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "b33dd235-d448-453c-9229-df15f294fa82",
+      "compoundSlug": "nmn",
+      "compoundName": "NMN",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "NMN 500mg",
+          "productUrl": "http://eliteresearchusa.com/products/nmn?variant=73",
+          "listPriceCents": 7000,
+          "lastSeenAt": "2026-02-15T23:24:52.194Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "e308dd59-c5f6-4eaf-bbec-267ac2f4582b",
+      "compoundSlug": "o-304",
+      "compoundName": "O-304",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "O-304 50mg",
+          "productUrl": "http://eliteresearchusa.com/products/o-304?variant=109",
+          "listPriceCents": 15000,
+          "lastSeenAt": "2026-02-15T23:24:57.640Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "1cbac9f5-3e49-4a51-ab36-8a6e94c1bd05",
+      "compoundSlug": "retatrutide",
+      "compoundName": "Retatrutide",
+      "vendor": {
+        "id": "1fcf3ef1-7863-4c66-915d-486fff857cce",
+        "slug": "nexgen-peptides",
+        "name": "NexGen Peptides"
+      },
+      "vendorCount": 1,
+      "offerCount": 4,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "NG-1 RT (10MG)",
+          "productUrl": "https://nexgenpeptides.shop/product/ng-rt-10/",
+          "listPriceCents": 13000,
+          "lastSeenAt": "2026-02-15T23:23:56.358Z"
+        },
+        {
+          "productName": "NG-1 RT (20MG)",
+          "productUrl": "https://nexgenpeptides.shop/product/ng-rt-20/",
+          "listPriceCents": 19900,
+          "lastSeenAt": "2026-02-15T23:23:53.426Z"
+        },
+        {
+          "productName": "NG-1 RT(60MG)",
+          "productUrl": "https://nexgenpeptides.shop/product/ng-rt-60/",
+          "listPriceCents": 55000,
+          "lastSeenAt": "2026-02-15T23:23:54.499Z"
+        },
+        {
+          "productName": "US Finished NG-1 RT (20MG)",
+          "productUrl": "https://nexgenpeptides.shop/product/glp-pharma-reta/",
+          "listPriceCents": 50000,
+          "lastSeenAt": "2026-02-15T23:23:48.553Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "9649eadc-a7f2-48db-9ffd-afbd5b393489",
+      "compoundSlug": "snap-8",
+      "compoundName": "SNAP-8",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "SNAP-8 10mg",
+          "productUrl": "http://eliteresearchusa.com/products/snap-8?variant=94",
+          "listPriceCents": 4000,
+          "lastSeenAt": "2026-02-15T23:25:07.083Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "e5d67dac-878d-47b0-9a10-0c2b4c424b41",
+      "compoundSlug": "sr-9011",
+      "compoundName": "SR-9011",
+      "vendor": {
+        "id": "d461d45b-428e-4040-8faf-b7804e64f5a7",
+        "slug": "elite-research-usa",
+        "name": "Elite Research USA"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "SR-9011 15mg",
+          "productUrl": "http://eliteresearchusa.com/products/sr-9011?variant=47",
+          "listPriceCents": 9600,
+          "lastSeenAt": "2026-02-15T23:25:07.738Z"
+        }
+      ]
+    },
+    {
+      "compoundId": "764de018-f95c-4e01-a8bd-f3394c364728",
+      "compoundSlug": "tirzepatide",
+      "compoundName": "Tirzepatide",
+      "vendor": {
+        "id": "1fcf3ef1-7863-4c66-915d-486fff857cce",
+        "slug": "nexgen-peptides",
+        "name": "NexGen Peptides"
+      },
+      "vendorCount": 1,
+      "offerCount": 1,
+      "recommendation": "keep_tracking_until_cross_vendor",
+      "signals": {
+        "blendOrStackProduct": false,
+        "brandLikeName": false,
+        "peptideLikeName": true
+      },
+      "manualDecision": {
+        "status": "pending",
+        "decidedBy": null,
+        "decidedAt": null,
+        "notes": ""
+      },
+      "offers": [
+        {
+          "productName": "GLP-1 TZ (10MG)",
+          "productUrl": "https://nexgenpeptides.shop/product/ng-tz-10/",
+          "listPriceCents": 9000,
+          "lastSeenAt": "2026-02-15T23:23:55.562Z"
+        }
+      ]
+    }
+  ]
+}
