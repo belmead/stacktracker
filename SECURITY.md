@@ -20,6 +20,7 @@ This repository uses a risk-based dependency policy aligned with enterprise AppS
   - rationale
   - compensating controls
 - Enforced by: `node scripts/security/enforce-moderate-advisories.mjs`.
+- Current baseline (`2026-02-20`): `0` dev-only moderate advisories, `0` active exceptions.
 
 ## SLA Targets
 - `critical`: remediate within 48 hours
@@ -45,3 +46,7 @@ Exceptions are temporary and must not be indefinite.
 - Exception registry: `security/moderate-advisory-exceptions.json`
 - Policy enforcement script: `scripts/security/enforce-moderate-advisories.mjs`
 - Latest validated workflow run: `22239230993` (`Secret Scan (gitleaks)` + `Dependency Vulnerability Policy Gate` passed).
+- Current local gate profile (`2026-02-20`):
+  - `npm audit --audit-level=high`: pass (`0` vulnerabilities)
+  - `npm audit --omit=dev --audit-level=moderate`: pass (`0` vulnerabilities)
+  - `npm run security:check-moderates`: pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)

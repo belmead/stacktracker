@@ -196,7 +196,7 @@ function parseJsonLd(raw: string): unknown[] {
     return [JSON.parse(trimmed)];
   } catch {
     // Some sites inject control chars in JSON-LD script blocks.
-    const sanitized = trimmed.replace(/\u0000/g, "").trim();
+    const sanitized = trimmed.split("\u0000").join("").trim();
     if (!sanitized) {
       return [];
     }

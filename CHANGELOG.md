@@ -109,6 +109,11 @@ All notable changes to Stack Tracker are documented in this file.
 - MVP single-unit scope enforcement is now active at ingestion:
   - bulk/pack/kit/multi-vial offers are excluded deterministically before alias/variant/price persistence.
   - excluded offers emit `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT`.
+- Lint/security tooling modernization (`2026-02-20`):
+  - replaced `next lint` with `oxlint` (`npm run lint` now executes `oxlint . --ignore-pattern next-env.d.ts --deny-warnings`);
+  - removed `eslint` and `eslint-config-next` from dev dependencies to eliminate the ESLint/AJV moderate advisory chain;
+  - set `next.config.ts` `eslint.ignoreDuringBuilds=true` so `next build` does not require ESLint;
+  - cleaned `security/moderate-advisory-exceptions.json` to `0` active exceptions after advisories cleared.
 - Woo discovery pricing precedence now uses storefront-rendered sale values from `price_html` when API numeric fields are stale (for example Eros `S 20MG` now resolves to `$95.99` instead of stale `$119.99`).
 - Compound display naming was normalized for CJC-with-DAC:
   - canonical `cjc-1295-with-dac-and-ipa` now displays as `CJC-1295 with DAC` while preserving legacy alias matching.

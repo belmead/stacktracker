@@ -279,11 +279,15 @@ Internal jobs:
   - CI enforces tracked expiration-based exceptions for remaining moderates via `security/moderate-advisory-exceptions.json` + `scripts/security/enforce-moderate-advisories.mjs`;
   - scrape-event/review-queue payload redaction is enforced via `lib/security/redaction.ts`;
   - runtime least-privilege credential guard supports `DATABASE_RUNTIME_USER`, and bootstrap/import scripts support `DATABASE_ADMIN_URL`.
+  - Lint stack is modernized to `oxlint` (`npm run lint`), with build-time ESLint disabled in Next config (`eslint.ignoreDuringBuilds=true`) to keep build and lint concerns separated.
 - Latest robustness cycle:
   - `npm run typecheck` pass
   - `npm run lint` pass
   - `npm run test` pass (`80` tests)
-  - `npm audit --audit-level=high` pass (`high=0`, `critical=0`; current `moderate=9`)
+  - `npm audit --audit-level=high` pass (`0` vulnerabilities)
+  - `npm audit --omit=dev --audit-level=moderate` pass (`0` vulnerabilities)
+  - `npm run security:check-moderates` pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)
+  - `npm run build` pass (with Next build-time lint disabled; lint remains enforced by `npm run lint`)
   - `npm run job:vendors` run `89043ac0-e797-49c2-9755-7f928a203c6a` completed (`status=partial`) with guardrails `invariant=pass`, `drift=pass`, `smoke=pass`.
   - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`, `leftOpen=0`).
   - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `89043ac0-e797-49c2-9755-7f928a203c6a`).
@@ -308,7 +312,7 @@ Internal jobs:
   - Remote run validated: `Security CI` run `22239230993` on `codex/mvp-scaffold`.
   - `Secret Scan (gitleaks)` passed.
   - `Dependency Vulnerability Policy Gate` passed.
-  - Current audit profile is moderate-only (`9` moderate advisories in ESLint/AJV chains; no high/critical findings).
+  - Current audit profile is clean (`0` high/critical/moderate advisories; exception registry currently empty).
 - Coverage expansion batches are onboarded in seed data:
   - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
   - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).

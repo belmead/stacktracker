@@ -722,7 +722,7 @@ async function analyzeWebsite(candidate, vendorName) {
 }
 
 async function mapWithConcurrency(items, concurrency, worker) {
-  const output = new Array(items.length);
+  const output = Array.from({ length: items.length });
   let nextIndex = 0;
 
   async function run() {

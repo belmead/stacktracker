@@ -30,7 +30,7 @@ function runAuditJson(args, label) {
 
   try {
     return JSON.parse(rawOutput);
-  } catch (error) {
+  } catch {
     const preview = rawOutput.slice(0, 500);
     fail(`${label} returned non-JSON output. Preview: ${preview}`);
   }

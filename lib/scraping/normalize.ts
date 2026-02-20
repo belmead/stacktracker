@@ -273,7 +273,7 @@ export function buildExtractedOffer(input: {
     available: isInStock(input.availabilityText ?? input.productName),
     rawPayload: {
       parsed,
-      ...(input.payload ?? {})
+      ...input.payload
     }
   };
 }

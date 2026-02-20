@@ -44,6 +44,10 @@ Current verified state:
    - docs sync commit: `6b8f2b82c9f87a1f9580f172f262afed6403ed76`
    - `vitest` and `@vitest/coverage-v8` at `4.0.18`
    - npm override: `minimatch ^10.2.2`
+   - lint stack modernization (current pass):
+     - `npm run lint` now uses `oxlint . --ignore-pattern next-env.d.ts --deny-warnings`
+     - removed `eslint` and `eslint-config-next` from devDependencies
+     - `next.config.ts` sets `eslint.ignoreDuringBuilds=true` (build no longer requires ESLint)
    - policy docs/config now present:
      - `SECURITY.md`
      - `security/moderate-advisory-exceptions.json`
@@ -51,18 +55,18 @@ Current verified state:
 9. Current dependency vulnerability profile:
    - `npm audit --audit-level=high`: pass (`0` high/critical)
    - `npm audit --omit=dev --audit-level=moderate`: pass (`0` production vulnerabilities)
-   - `npm run security:check-moderates`: pass (`moderate=9`, `tracked=9`, `missing=0`, `expired=0`)
+   - `npm run security:check-moderates`: pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)
 10. Latest validated Security CI run:
     - `22239230993` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22239230993))
     - `Secret Scan (gitleaks)`: pass
     - `Dependency Vulnerability Policy Gate`: pass
 
 Primary tasks for next chat:
-1. Maintain the moderate-exception lifecycle:
-   - keep owner/ticket/expiry current in `security/moderate-advisory-exceptions.json`
-   - remove stale exceptions when advisories clear
-   - expire or renew exceptions before `2026-05-21`
-2. Optional hardening track: reduce or eliminate the `9` moderate dev-tooling advisories via lint-stack modernization (for example ESLint CLI migration / Next lint deprecation path), then re-verify policy gates.
+1. Maintain the zero-moderate baseline:
+   - keep `security/moderate-advisory-exceptions.json` empty unless a new dev-only moderate is introduced
+   - if a new moderate appears, add owner/ticket/expiry and then clear it in the next remediation cycle
+2. Optional hardening track:
+   - keep oxlint strict mode healthy (`--deny-warnings`) and maintain generated-file ignore list intentionally (`next-env.d.ts`).
 3. If any runtime dependency or scraper/runtime code changes are introduced, run the robustness cycle:
    - `npm run job:vendors`
    - `npm run job:review-ai -- --limit=50`

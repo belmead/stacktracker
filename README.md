@@ -64,6 +64,10 @@ Primary docs:
     - block `high/critical` advisories across all dependencies,
     - block `moderate+` advisories in production dependencies (`--omit=dev`),
     - require tracked time-bound exceptions for remaining dev-only moderates.
+  - Lint-stack modernization (`2026-02-20`):
+    - migrated from `next lint`/ESLint to `oxlint` (`npm run lint` now runs `oxlint . --ignore-pattern next-env.d.ts --deny-warnings`),
+    - removed `eslint` and `eslint-config-next` from dev dependencies,
+    - set `next.config.ts` `eslint.ignoreDuringBuilds=true` so `next build` does not require ESLint while linting stays enforced in CI/local via `npm run lint`.
   - Tracked exception registry: `security/moderate-advisory-exceptions.json`.
   - Enforcement script: `scripts/security/enforce-moderate-advisories.mjs`.
   - Event/review payload redaction before DB persistence: `lib/security/redaction.ts`.
@@ -73,7 +77,7 @@ Primary docs:
   - Workflow run `22239230993` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
   - `Secret Scan (gitleaks)`: pass.
   - `Dependency Vulnerability Policy Gate`: pass (`npm audit --audit-level=high`, `npm audit --omit=dev --audit-level=moderate`, `npm run security:check-moderates`).
-  - Current audit profile: `0` high/critical, `9` moderate advisories (ESLint/AJV chain).
+  - Current audit profile after lint-stack modernization: `0` high/critical, `0` moderate advisories; exception registry currently has `0` active entries.
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
   - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.
@@ -295,7 +299,8 @@ Status in this pass:
   - `Secret Scan (gitleaks)` and `Dependency Vulnerability Policy Gate` both passed.
 - Current dependency-vulnerability status:
   - `npm audit --audit-level=high` passes (no high/critical vulnerabilities).
-  - `npm audit` currently reports `9` moderate advisories (ESLint/AJV chain), with no high/critical findings.
+  - `npm audit` currently reports `0` vulnerabilities.
+  - `npm run security:check-moderates` reports `moderate=0`, `tracked=0`, `missing=0`, `expired=0`.
 - Runtime log/event redaction is now enforced before persistence for scrape events and review queue payloads:
   - redaction utility: `lib/security/redaction.ts`
   - call sites: `recordScrapeEvent`, `createReviewQueueItem`

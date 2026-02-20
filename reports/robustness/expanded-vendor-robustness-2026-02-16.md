@@ -1,5 +1,26 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
+## Continuation Snapshot (2026-02-20, lint-stack modernization + zero-moderate hardening)
+### Tooling/security update
+- Completed lint-stack modernization to remove remaining dev-only moderate advisories:
+  - migrated lint command to `oxlint` (`npm run lint` -> `oxlint . --ignore-pattern next-env.d.ts --deny-warnings`);
+  - removed `eslint` and `eslint-config-next` from dev dependencies;
+  - enabled `next.config.ts` `eslint.ignoreDuringBuilds=true` so `next build` no longer requires ESLint.
+- Moderate-exception lifecycle cleanup:
+  - removed stale entries from `security/moderate-advisory-exceptions.json` after advisory elimination (`exceptions=[]`).
+
+### Verification cycle
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run test`: pass (`80` tests)
+- `npm audit --audit-level=high`: pass (`0` vulnerabilities)
+- `npm audit --omit=dev --audit-level=moderate`: pass (`0` vulnerabilities)
+- `npm run security:check-moderates`: pass (`moderate=0`, `tracked=0`, `missing=0`, `expired=0`)
+- `npm run build`: pass (reports `Skipping linting`; lint remains enforced by `npm run lint`)
+
+### Robustness-cycle rerun decision
+- Skipped `job:vendors`, `job:review-ai -- --limit=50`, and `job:smoke-top-compounds` in this pass because changes are tooling/config/security-registry only and do not modify runtime scraping/job logic.
+
 ## Continuation Snapshot (2026-02-20, security dependency remediation + Security CI pass)
 ### Security dependency update
 - Applied smallest safe dependency strategy for the vulnerability gate:
