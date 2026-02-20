@@ -121,6 +121,15 @@ function required(name: string): string {
   return value;
 }
 
+function resolveDatabaseUrl(): string {
+  const adminUrl = process.env.DATABASE_ADMIN_URL;
+  if (adminUrl) {
+    return adminUrl;
+  }
+
+  return required("DATABASE_URL");
+}
+
 function sslMode(): "require" | false {
   return process.env.DATABASE_SSL_MODE === "disable" ? false : "require";
 }
@@ -178,7 +187,7 @@ function buildAssignmentCompoundSeeds(assignments: Assignment[]): Array<{ name: 
 }
 
 async function main(): Promise<void> {
-  const sql = postgres(required("DATABASE_URL"), {
+  const sql = postgres(resolveDatabaseUrl(), {
     max: 1,
     ssl: sslMode(),
     prepare: prepareMode()

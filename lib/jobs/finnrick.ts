@@ -13,49 +13,66 @@ function normalizeName(input: string): string {
     .replace(/\s+/g, " ");
 }
 
-function extractRating(input: string): number | null {
-  const match = input.match(/(\d(?:\.\d+)?)(?:\s*\/\s*5)?/);
-  if (!match) {
+function parseFinnrickRatingRange(rawValue: string): string | null {
+  const trimmed = rawValue.replace(/\s+/g, " ").trim();
+  if (!trimmed) {
     return null;
   }
 
-  const value = Number(match[1]);
-  if (!Number.isFinite(value)) {
-    return null;
+  const compact = trimmed.replace(/\s+/g, "");
+  if (/^[A-Z]$/i.test(compact)) {
+    return compact.toUpperCase();
   }
 
-  if (value < 0 || value > 5) {
-    return null;
+  const compactRangeMatch = compact.match(/^to([A-Z])([A-Z])$/i) ?? compact.match(/^([A-Z])to([A-Z])$/i);
+  if (compactRangeMatch) {
+    const start = (compactRangeMatch[1] ?? "").toUpperCase();
+    const end = (compactRangeMatch[2] ?? "").toUpperCase();
+    if (start && end) {
+      return `${start} to ${end}`;
+    }
   }
 
-  return value;
+  const spacedRangeMatch = trimmed.match(/^([A-Z])\s*(?:to|-)\s*([A-Z])$/i);
+  if (spacedRangeMatch) {
+    const start = (spacedRangeMatch[1] ?? "").toUpperCase();
+    const end = (spacedRangeMatch[2] ?? "").toUpperCase();
+    if (start && end) {
+      return `${start} to ${end}`;
+    }
+  }
+
+  if (/^n\/?a$/i.test(compact)) {
+    return "N/A";
+  }
+
+  return trimmed;
 }
 
-function parseFinnrickRows(html: string): Array<{ vendorName: string; rating: number | null; ratingLabel: string | null }> {
+export function parseFinnrickRows(html: string): Array<{ vendorName: string; rating: number | null; ratingLabel: string | null }> {
   const $ = cheerio.load(html);
   const rows: Array<{ vendorName: string; rating: number | null; ratingLabel: string | null }> = [];
 
-  $("table tr").each((_, tr) => {
+  $("table tbody tr").each((_, tr) => {
     const cells = $(tr)
       .find("td")
       .toArray()
-      .map((cell) => $(cell).text().replace(/\s+/g, " ").trim())
-      .filter(Boolean);
+      .map((cell) => $(cell).text().replace(/\s+/g, " ").trim());
 
     if (cells.length === 0) {
       return;
     }
 
-    const vendorName = cells[0];
+    const compactCells = cells.filter((value) => value.length > 0);
+    const vendorName = cells[1] || compactCells[0] || "";
     if (!vendorName || vendorName.length < 2) {
       return;
     }
 
-    const joined = cells.join(" ");
-    const rating = extractRating(joined);
-    const ratingLabel = rating === null ? "N/A" : `${rating}/5`;
+    const rawRatingRange = cells[2] || compactCells[1] || "";
+    const ratingLabel = parseFinnrickRatingRange(rawRatingRange) ?? "N/A";
 
-    rows.push({ vendorName, rating, ratingLabel });
+    rows.push({ vendorName, rating: null, ratingLabel });
   });
 
   return rows;

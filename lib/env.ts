@@ -3,6 +3,8 @@ import { z } from "zod";
 const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1),
+  DATABASE_ADMIN_URL: z.string().min(1).optional(),
+  DATABASE_RUNTIME_USER: z.string().min(1).optional(),
   DATABASE_SSL_MODE: z.enum(["require", "disable"]).default("require"),
   DATABASE_PREPARE: z.enum(["true", "false"]).default("false"),
   ADMIN_EMAIL: z.string().email(),
@@ -28,6 +30,7 @@ const envSchema = z.object({
   SCRAPE_RUN_LAG_ALERT_SECONDS: z.coerce.number().int().positive().default(120),
   REVIEW_QUEUE_RETENTION_DAYS: z.coerce.number().int().positive().default(45),
   NON_TRACKABLE_ALIAS_RETENTION_DAYS: z.coerce.number().int().positive().default(120),
+  NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS: z.coerce.number().int().positive().default(14),
   QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS: z.coerce.number().int().positive().default(10),
   QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE: z.coerce.number().min(0).max(1).default(0.8),
   QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP: z.coerce.number().min(0).max(1).default(0.2),
@@ -39,6 +42,8 @@ const envSchema = z.object({
 export const env = envSchema.parse({
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_ADMIN_URL: process.env.DATABASE_ADMIN_URL,
+  DATABASE_RUNTIME_USER: process.env.DATABASE_RUNTIME_USER,
   DATABASE_SSL_MODE: process.env.DATABASE_SSL_MODE,
   DATABASE_PREPARE: process.env.DATABASE_PREPARE,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
@@ -62,6 +67,7 @@ export const env = envSchema.parse({
   SCRAPE_RUN_LAG_ALERT_SECONDS: process.env.SCRAPE_RUN_LAG_ALERT_SECONDS,
   REVIEW_QUEUE_RETENTION_DAYS: process.env.REVIEW_QUEUE_RETENTION_DAYS,
   NON_TRACKABLE_ALIAS_RETENTION_DAYS: process.env.NON_TRACKABLE_ALIAS_RETENTION_DAYS,
+  NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS: process.env.NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS,
   QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS: process.env.QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS,
   QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE: process.env.QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE,
   QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP: process.env.QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP,

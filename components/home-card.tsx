@@ -44,7 +44,7 @@ export function HomeCard({ card }: HomeCardProps) {
                   </td>
                   <td>{formatPriceCents(row.metricPrice)}</td>
                   <td>
-                    <span className="rating-badge">{row.finnrickRating === null ? "N/A" : row.finnrickRating.toFixed(1)}</span>
+                    <span className="rating-badge">{row.finnrickRating ?? "N/A"}</span>
                   </td>
                 </tr>
               ))}

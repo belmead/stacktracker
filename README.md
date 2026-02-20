@@ -6,31 +6,36 @@ Primary docs:
 - Product requirements: `PRD.md`
 - Current status and restart checklist: `HANDOFF.md`
 
-## Latest Status (2026-02-17)
+## Latest Status (2026-02-20)
 
 - Coverage:
   - Active vendors: `45`
   - Active vendor pages: `53`
-- Latest vendor run:
-  - Run ID: `425efba4-127e-4792-903d-8113bf45c206`
+- Latest full vendor run:
+  - Run ID: `89043ac0-e797-49c2-9755-7f928a203c6a`
   - Status: `partial`
-  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
-  - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
-  - `offersExcludedByRule=325`
-  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - `pagesTotal=53`, `pagesSuccess=31`, `pagesFailed=22`
+  - `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=823`
+  - `offersExcludedByRule=328`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=370`, `aiTasksQueued=22`
   - quality guardrails: invariant `pass`, drift `pass`, smoke `pass`
+- Latest scoped suppression-validation run:
+  - Run ID: `c1f47324-133c-4ff5-826f-a98f82392fa4` (`Amino Asylum` only)
+  - Status: `partial` (`pagesTotal=1`, `pagesFailed=1`, `reason=network_filter_blocked`)
+  - Live check result: `NETWORK_FILTER_BLOCKED` event emitted with `parseFailureQueueSuppressed=true` and no new parse-failure queue row created.
 - Smoke regression remediation (`thymosin-alpha-1 24 -> 0`) shipped:
   - Root cause: smoke comparator used current top-`N` snapshot only, so a baseline-tracked slug falling just outside current top-`N` was treated as `0`.
   - Fix: hydrate current coverage for any baseline-tracked compounds missing from current top-`N` before smoke evaluation (vendor worker + standalone smoke script).
   - Regression coverage: `tests/unit/quality-guardrails.test.ts` now validates missing-baseline-slug hydration helpers.
 - Current `thymosin-alpha-1` coverage:
-  - `27` active vendors / `27` active offers.
+  - `27` active vendors / `28` active offers.
 - Latest smoke baseline run:
-  - `425efba4-127e-4792-903d-8113bf45c206` (`job:smoke-top-compounds` now passes against this baseline).
+  - `89043ac0-e797-49c2-9755-7f928a203c6a` (`job:smoke-top-compounds` passes against this baseline).
 - Alias queue (`queue_type='alias_match'`):
   - `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
 - Parse-failure queue (`queue_type='parse_failure'`):
-  - `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+  - `discovery_fetch_failed` open rows are now `0` (prior `elitepeptides.com` outlier is reclassified/triaged).
 - Newly onboarded vendors in this pass:
   - `precisionpeptideco.com`
   - `aminoasylumllc.com`
@@ -40,11 +45,25 @@ Primary docs:
   - `peptidesupplyco.org`
   - `trustedpeptide.net`
   - `crushresearch.com`
-- Current failing-page diagnostics in the latest run:
-  - `Kits4Less` (`https://kits4less.com/`) -> `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` (currently observed without provider marker in this run; queue still records cloudflare-block reason on dedicated entries).
+- Current failing-page diagnostics in the latest full run:
   - `PeptiAtlas` (`https://peptiatlas.com/`) -> `INVALID_PRICING_PAYLOAD` (Woo candidates found, all observed price fields are zero).
-- Additional no-offers regressions in latest run:
-  - `Amino Asylum`, `Amplify Peptides`, `Atomik Labz`, `BioLongevity Labs`, `BioPepz`, `Coastal Peptides`, `Crush Research`, `Dragon Pharma Store`, `Elite Peptides`, `Eros Peptides`, `HK Roids`, `Peptides World`, `Pura Peptides`, `Pure Peptide Labs`, `PurePeps`, `PureRawz`, `Simple Peptide`, `The Peptide Haven`, `Trusted Peptide`.
+  - 21 storefront roots -> `NETWORK_FILTER_BLOCKED` events (20 currently open in parse-failure queue after suppression/triage checks).
+- Regression-cluster diagnosis (`20` roots):
+  - All three discovery sources failed with transport errors (`fetch failed | read ECONNRESET | code=ECONNRESET`) on each affected page.
+  - Worker now retries once for this all-source transport-failure pattern and classifies Meraki-style egress filter redirects (`blocked.cgi`) as `network_filter_blocked`.
+  - Parse-failure payloads now carry blocked-site metadata (`networkFilterProvider/category/location/server/url/status/probeUrl`) plus discovery source/error arrays.
+- Hybrid parse-failure suppression policy (`network_filter_blocked`):
+  - Repeated deterministic blocked signatures now use `networkFilterSignature` fingerprinting to suppress duplicate queue inserts after prior triage.
+  - Scrape events still record every occurrence; event payloads now include `networkFilterSignature` and `parseFailureQueueSuppressed`.
+  - Suppression window is configurable via `NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS` (default `14`).
+  - Live validation confirms suppression behavior on triaged rows (`c1f47324-133c-4ff5-826f-a98f82392fa4`).
+- Security controls now live in code:
+  - CI secret scanning + vulnerability gating: `.github/workflows/security-ci.yml`.
+  - Event/review payload redaction before DB persistence: `lib/security/redaction.ts`.
+  - Least-privilege runtime credential guard: optional `DATABASE_RUNTIME_USER` assertion + `DATABASE_ADMIN_URL` script split.
+  - Dependency baseline patched for CVEs: `next`/`eslint-config-next` upgraded to `15.5.12`; `npm audit --audit-level=high` currently clean (`0` vulnerabilities).
+- Security CI remote validation note:
+  - `gh` auth is now configured locally, but remote `belmead/stacktracker` currently has no workflow files/runs in GitHub Actions, so `Security CI` run/log validation remains blocked until workflow files are pushed.
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
   - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.
@@ -54,6 +73,14 @@ Primary docs:
 - Current product-scope note:
   - MVP scope enforcement is active: bulk/pack/kit/multi-vial offers are excluded during ingestion before public aggregation.
   - Bulk-pack economics remain deferred to v2.
+- Parse-failure queue dedupe hardening:
+  - `createReviewQueueItem` now dedupes open/in-progress `parse_failure` rows per `(vendor_id, page_url)` and refreshes payload metadata in place.
+  - One-time cleanup reduced historical open parse-failure duplicates from `96` to `25`.
+  - Legacy `no_offers_found` rows on remediated/historical targets were resolved in this pass (`25` -> `21` open parse-failure rows).
+- Latest Finnrick sync:
+  - Run ID: `28ce6525-14ce-4cfc-b043-83f9440944ea`
+  - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
+  - Ratings now track Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) instead of numeric scores; latest-vendor labels are `0/45` numeric.
 
 ## What is implemented
 
@@ -80,6 +107,10 @@ Primary docs:
   - HTML extraction now also parses Wix storefront warmup payloads (`#wix-warmup-data`) for product/price recovery on Wix-only vendors.
   - HTML discovery now falls back to vendor root URL when a seeded page target returns empty HTML (for example `eliteresearchusa.com/products`).
   - Discovery and HTML fetch calls now use transient retry/backoff guards to reduce `ECONNRESET`/timeout flakiness.
+  - Discovery now captures nested transport error causes/codes and classifies all-source network failures as:
+    - `NETWORK_FILTER_BLOCKED` (`network_filter_blocked` queue reason) when Meraki-style blocked redirects are detected.
+    - `DISCOVERY_FETCH_FAILED` (`discovery_fetch_failed` queue reason) fallback when no deterministic blocked-site fingerprint is present.
+  - Worker now retries discovery once for all-source transport-failure pages before queueing fallback.
   - Woo discovery now emits explicit invalid-pricing diagnostics when product candidates exist but all observed prices are zero/empty (`INVALID_PRICING_PAYLOAD`).
   - Safe-mode access blocks now emit provider-aware classification context (`safe_mode_access_blocked`) with Cloudflare-specific compatibility tagging (`safe_mode_cloudflare_blocked`) in no-offers/discovery-failure events.
   - PrestaShop-style product tiles are now supported in HTML extraction (for example `li.ajax_block_product`, `.product-container`, `.product-miniature`).
@@ -92,6 +123,7 @@ Primary docs:
   - Alias triage strips storefront/CTA noise and price fragments before deterministic and AI matching.
   - Non-product listings and blend/stack products are auto-skipped for single-compound tracking integrity.
   - Post-run quality guardrails now evaluate formulation invariants, run-over-run drift, and top-compound coverage smoke checks.
+  - Guardrail snapshots now persist hydrated smoke coverage (including baseline-tracked slugs pulled outside current top-`N`) to prevent false zero comparisons across runs.
   - GLP shorthand (for example `RT`, `GLP-3`, `NG-1 RT`, and single-letter `R/S/T` dose aliases) is recognized to reduce avoidable manual review.
   - Single-letter GLP aliases only auto-match when paired with milligram dosage (`R ... mg`, `S ... mg`, `T ... mg`).
   - 24-hour Finnrick sync with `N/A` fallback.
@@ -139,6 +171,8 @@ cp .env.example .env.local
 3. Set required env vars in `.env.local`:
 
 - `DATABASE_URL`
+- Optional: `DATABASE_ADMIN_URL` (admin/migration credential used by `db:bootstrap` / `db:import-categories`; keep out of runtime app env where possible)
+- Optional: `DATABASE_RUNTIME_USER` (runtime DB username assertion to enforce least-privilege credential wiring)
 - `DATABASE_SSL_MODE` (`require` for Supabase, `disable` for local Postgres)
 - `DATABASE_PREPARE=false` (recommended for pooled/serverless connections)
 - `ADMIN_EMAIL=stacktracker@proton.me`
@@ -161,6 +195,7 @@ Optional while domain is not purchased yet:
   - `SCRAPE_RUN_LAG_ALERT_SECONDS` (default `120`)
   - `REVIEW_QUEUE_RETENTION_DAYS` (default `45`, prunes aged `resolved`/`ignored` review rows)
   - `NON_TRACKABLE_ALIAS_RETENTION_DAYS` (default `120`, prunes aged non-trackable alias memory where `compound_id` is null)
+  - `NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS` (default `14`, suppresses repeated triaged `network_filter_blocked` queue inserts for identical deterministic signatures)
   - `QUALITY_INVARIANT_BPC157_10MG_MIN_OFFERS` (default `10`)
   - `QUALITY_INVARIANT_BPC157_10MG_MIN_VIAL_SHARE` (default `0.8`)
   - `QUALITY_DRIFT_BPC157_10MG_MAX_VIAL_SHARE_DROP` (default `0.2`)
@@ -212,7 +247,7 @@ npm run job:exclusion-enforce
 npm run job:smoke-top-compounds
 ```
 
-## Production security hardening (initial plan)
+## Production security hardening (implemented + remaining)
 
 Before production launch, enforce all of the following:
 
@@ -239,7 +274,20 @@ Before production launch, enforce all of the following:
    - Maintain audit logs for env-var changes, deploys, and admin actions.
 
 Status in this pass:
-- Parse-failure queue legacy cloudflare-block payloads were backfilled so open blocked-site entries now have complete provider/status/source metadata (`3/3` complete).
+- CI secret scanning and vulnerability gating are now implemented in `.github/workflows/security-ci.yml`:
+  - `gitleaks` scans full git history.
+  - `npm audit --audit-level=high` gates high/critical CVEs.
+- GitHub Actions runtime verification note:
+  - validating the latest remote workflow runs requires authenticated `gh` CLI access (`gh auth login`).
+  - local environment in this pass was unauthenticated, so remote run-status confirmation was blocked.
+- Dependency CVE baseline was remediated by upgrading `next` and `eslint-config-next` to `15.5.12` (`npm audit` currently reports `0` vulnerabilities).
+- Runtime log/event redaction is now enforced before persistence for scrape events and review queue payloads:
+  - redaction utility: `lib/security/redaction.ts`
+  - call sites: `recordScrapeEvent`, `createReviewQueueItem`
+- Least-privilege runtime DB credential model is now codified:
+  - optional runtime role assertion via `DATABASE_RUNTIME_USER` in `lib/db/client.ts`
+  - optional admin/bootstrap credential split via `DATABASE_ADMIN_URL` in DB scripts.
+- Parse-failure queue legacy cloudflare-block payloads remain metadata-complete (`3/3` provider/status/source).
 
 `job:review-ai` runs AI triage on open alias review items and auto-resolves/auto-ignores clear cases.
 Use `--limit=<N>` (or `REVIEW_AI_LIMIT`) for cost-controlled slices instead of scanning the full queue.
@@ -288,6 +336,7 @@ Codex runtime note:
 1. Create a Supabase project and copy the Postgres connection string.
 2. In Vercel project settings, set env vars:
    - `DATABASE_URL` (Supabase connection string)
+   - `DATABASE_RUNTIME_USER` (optional but recommended; runtime DB role username assertion)
    - `DATABASE_SSL_MODE=require`
    - `DATABASE_PREPARE=false`
    - `ADMIN_EMAIL`, `ADMIN_AUTH_SECRET`, `CRON_SECRET`
@@ -297,9 +346,10 @@ Codex runtime note:
    - `FIRECRAWL_API_BASE_URL` (optional override; default `https://api.firecrawl.dev/v2`)
    - `RESEND_API_KEY`, `ALERT_FROM_EMAIL`, `ALERT_TO_EMAIL` (required for production admin magic-link email delivery)
    - `NEXT_PUBLIC_APP_URL` (production base URL)
-3. In your local `.env.local`, mirror the same values.
-4. Run `npm run db:bootstrap` once against the target DB.
-5. Deploy to Vercel (cron jobs are defined in `vercel.json`).
+3. For admin/bootstrap scripts, optionally set `DATABASE_ADMIN_URL` with elevated migration credentials (do not use this value in runtime app deployment env).
+4. In your local `.env.local`, mirror the same values.
+5. Run `npm run db:bootstrap` once against the target DB.
+6. Deploy to Vercel (cron jobs are defined in `vercel.json`).
 
 Cron endpoints (production/internal use):
 

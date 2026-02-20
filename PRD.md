@@ -207,7 +207,7 @@ Internal jobs:
 - UI stage: minimal wireframe with tokenized styles.
 - Typography note: reserve slot for future Geist Pixel application in polish phase.
 
-## 10. Current Implementation Status (as of 2026-02-17)
+## 10. Current Implementation Status (as of 2026-02-20)
 - MVP scaffold implemented across app, API, schema, jobs, admin, and tests.
 - Code quality gates are passing under Node 20.
 - Current active coverage is `45` vendors / `53` vendor pages.
@@ -257,23 +257,48 @@ Internal jobs:
 - Smoke comparator regression fix shipped (`2026-02-17`):
   - root cause: baseline-tracked compound slugs could fall outside current top-`N` snapshot and be interpreted as zero coverage;
   - remediation: hydrate current coverage for baseline-tracked missing slugs before smoke evaluation in both `job:vendors` and `job:smoke-top-compounds`.
+- Discovery transport-failure classification hardening shipped (`2026-02-17`):
+  - all-source network failures are now classified as `NETWORK_FILTER_BLOCKED` (queue reason `network_filter_blocked`) when Meraki-style blocked redirects are detected;
+  - unresolved transport failures without a deterministic blocked-site fingerprint still classify as `DISCOVERY_FETCH_FAILED` (queue reason `discovery_fetch_failed`);
+  - worker retries discovery once for this pattern before fallback tasking;
+  - parse-failure payloads now persist failing source/error arrays plus blocked-site metadata (`networkFilterProvider/category/location/server/url/status/probeUrl`) for deterministic triage.
+- Parse-failure queue dedupe hardening shipped (`2026-02-17`):
+  - `parse_failure` review items are now deduped by `(vendor_id, page_url)` while status is `open|in_progress`;
+  - one-time duplicate cleanup reduced open parse-failure rows from `96` to `25`.
+- Deterministic `network_filter_blocked` queue suppression shipped (`2026-02-20`):
+  - parse-failure payloads now include `networkFilterSignature` for deterministic blocked-site fingerprints;
+  - repeated identical triaged signatures on the same `(vendor_id, page_url)` are suppressed for a configurable cooldown window (`NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS`, default `14`);
+  - scrape events still emit full `NETWORK_FILTER_BLOCKED` diagnostics with suppression metadata (`parseFailureQueueSuppressed`) for visibility.
+- Security controls now implemented in-code (`2026-02-17`):
+  - CI security workflow adds full-history secret scanning (`gitleaks`) and high/critical dependency gating (`npm audit --audit-level=high`);
+  - scrape-event/review-queue payload redaction is enforced via `lib/security/redaction.ts`;
+  - runtime least-privilege credential guard supports `DATABASE_RUNTIME_USER`, and bootstrap/import scripts support `DATABASE_ADMIN_URL`.
 - Latest robustness cycle:
   - `npm run typecheck` pass
   - `npm run lint` pass
-  - `npm run test` pass (`74` tests)
-  - `npm run job:vendors` run `425efba4-127e-4792-903d-8113bf45c206` completed (`status=partial`) with guardrails `invariant=pass`, `drift=pass`, `smoke=pass`.
+  - `npm run test` pass (`80` tests)
+  - `npm audit --audit-level=high` pass (`0` vulnerabilities)
+  - `npm run job:vendors` run `89043ac0-e797-49c2-9755-7f928a203c6a` completed (`status=partial`) with guardrails `invariant=pass`, `drift=pass`, `smoke=pass`.
   - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`, `leftOpen=0`).
-  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `425efba4-127e-4792-903d-8113bf45c206`).
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `89043ac0-e797-49c2-9755-7f928a203c6a`).
+  - Live suppression-validation run `c1f47324-133c-4ff5-826f-a98f82392fa4` (vendor-scoped) confirmed event visibility + queue suppression (`parseFailureQueueSuppressed=true`) for deterministic blocked signatures.
 - Current queue and coverage snapshot:
   - Alias queue (`queue_type='alias_match'`): `open=0`, `resolved=466`, `ignored=432`.
-  - Parse-failure queue (`queue_type='parse_failure'`): `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`).
+  - Parse-failure queue (`queue_type='parse_failure'`): `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`).
+  - `discovery_fetch_failed` open rows: `0`.
   - Active coverage: `45` vendors / `53` vendor pages.
-- Current `thymosin-alpha-1` coverage: `27` active vendors (`27` active offers), validating that the prior `24 -> 0` smoke output was comparator drift rather than ingestion loss.
+- Current `thymosin-alpha-1` coverage: `27` active vendors (`28` active offers), validating that the prior `24 -> 0` smoke output was comparator drift rather than ingestion loss.
 - Latest vendor run page-failure profile:
-  - `21` failed pages, primarily `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` on vendor root targets (`no_offers_found`);
-  - `PeptiAtlas` continues expected `INVALID_PRICING_PAYLOAD`.
+  - `22` failed pages total in run `89043ac0-e797-49c2-9755-7f928a203c6a`:
+    - `21` are `NETWORK_FILTER_BLOCKED` with repeated transport errors (`fetch failed | read ECONNRESET | code=ECONNRESET`) and deterministic Meraki blocked-page probes;
+    - `1` is expected `INVALID_PRICING_PAYLOAD` (`PeptiAtlas`).
+  - Prior `elitepeptides.com` `DISCOVERY_FETCH_FAILED` outlier is now reclassified into the deterministic blocked cohort.
 - Latest `job:review-ai` baseline run (`2026-02-15`, pre-key fix) completed with `itemsScanned=580`, `resolved=64`, `ignored=0`, `leftOpen=516` in `420.01s`.
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
+- Latest Finnrick run: `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
+- Finnrick rating presentation now uses textual `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end in parsing, storage selection, and UI rendering.
+- Security CI runtime validation caveat:
+  - `gh` CLI is authenticated locally; remote workflow run/log verification proceeds after branch push.
 - Coverage expansion batches are onboarded in seed data:
   - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
   - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).
@@ -285,7 +310,7 @@ Internal jobs:
   - Batch 3 vendor run `9b1960c1-9db9-467e-b477-eba428770954` (`status=partial`, `pagesTotal=38`, `pagesSuccess=32`, `pagesFailed=6`, `offersCreated=347`, `offersUpdated=1`, `offersUnchanged=766`, `unresolvedAliases=69`, `aliasesSkippedByAi=543`).
   - Stabilization vendor run `783e2611-43ed-471f-b493-d572fa6fd49d` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=48`, `offersUpdated=0`, `offersUnchanged=1210`, `unresolvedAliases=4`, `aliasesSkippedByAi=679`, `aiTasksQueued=1`).
   - Guardrail drift verification run `8807da2b-e1d4-4ad9-93c0-15bf66999254` (`status=partial`, `pagesTotal=38`, `pagesSuccess=37`, `pagesFailed=1`, `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=1243`, `unresolvedAliases=0`, `aliasesSkippedByAi=668`, `aiTasksQueued=1`).
-  - Latest Finnrick run remains `5233e9be-24fb-42ba-9084-2e8dde507589` and is intentionally deferred during active scrape-expansion passes.
+  - Historical expansion note: Finnrick was deferred during those specific expansion passes until the explicit rerun in this pass (`084b323c-6472-4554-b11f-d0aa19f0889c`).
 - Alias queue delta across expansion cycles:
   - Batch 1: `open=73` -> `open=0` (net `resolved +53`, `ignored +20`).
   - Batch 2: `open=16` -> `open=0` (net `resolved +3`, `ignored +13`).

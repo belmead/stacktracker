@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db/client";
+import { redactSensitiveData } from "@/lib/security/redaction";
 import type { JSONValue } from "postgres";
 import type {
   HomeCard,
@@ -17,6 +18,16 @@ import type {
 
 const toJson = (value: unknown) => sql.json(value as JSONValue);
 let scrapeRunsHeartbeatReady: Promise<void> | null = null;
+
+function getNetworkFilterQueueSuppressionDays(): number {
+  const rawDays = process.env.NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS;
+  const parsed = rawDays ? Number.parseInt(rawDays, 10) : Number.NaN;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return 14;
+}
 
 async function ensureScrapeRunsHeartbeatColumn(): Promise<void> {
   if (!scrapeRunsHeartbeatReady) {
@@ -262,7 +273,7 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
         vendorName: string;
         vendorUrl: string;
         metricPrice: number | null;
-        finnrickRating: number | null;
+        finnrickRating: string | null;
       }[]
     >`
       with ranked as (
@@ -271,7 +282,7 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
           v.name as vendor_name,
           coalesce(oc.product_url, v.website_url) as vendor_url,
           ${metricUnsafe}::float8 as metric_price,
-          fr.rating::float8 as finnrick_rating,
+          fr.rating_label as finnrick_rating,
           row_number() over (
             partition by v.id
             order by ${metricUnsafe} asc nulls last, oc.last_seen_at desc, oc.id asc
@@ -279,7 +290,7 @@ export async function getHomePayload(metric: MetricType = "price_per_mg"): Promi
         from offers_current oc
         inner join vendors v on v.id = oc.vendor_id
         left join lateral (
-          select rating
+          select rating_label
           from finnrick_ratings fr
           where fr.vendor_id = v.id
           order by fr.rated_at desc
@@ -471,7 +482,7 @@ export interface OfferRow {
   vendorUrl: string;
   metricPrice: number | null;
   metricValues: MetricPriceMap;
-  finnrickRating: number | null;
+  finnrickRating: string | null;
   lastSeenAt: string;
 }
 
@@ -548,7 +559,7 @@ export async function getOffersForVariant(input: {
       pricePerMlCents: number | null;
       pricePerVialCents: number | null;
       pricePerUnitCents: number | null;
-      finnrickRating: number | null;
+      finnrickRating: string | null;
       lastSeenAt: string;
     }[]
   >`
@@ -563,7 +574,7 @@ export async function getOffersForVariant(input: {
         oc.price_per_ml_cents::float8 as price_per_ml_cents,
         oc.price_per_vial_cents::float8 as price_per_vial_cents,
         oc.price_per_unit_cents::float8 as price_per_unit_cents,
-        fr.rating::float8 as finnrick_rating,
+        fr.rating_label as finnrick_rating,
         oc.last_seen_at,
         row_number() over (
           partition by v.id
@@ -572,7 +583,7 @@ export async function getOffersForVariant(input: {
       from offers_current oc
       inner join vendors v on v.id = oc.vendor_id
       left join lateral (
-        select rating
+        select rating_label
         from finnrick_ratings fr
         where fr.vendor_id = v.id
         order by fr.rated_at desc
@@ -631,7 +642,7 @@ export interface VendorDetails {
   name: string;
   slug: string;
   websiteUrl: string;
-  finnrickRating: number | null;
+  finnrickRating: string | null;
   lastUpdatedAt: string | null;
 }
 
@@ -642,11 +653,11 @@ export async function getVendorBySlug(slug: string): Promise<VendorDetails | nul
       v.name,
       v.slug,
       v.website_url,
-      fr.rating::float8 as finnrick_rating,
+      fr.rating_label as finnrick_rating,
       summary.last_updated_at
     from vendors v
     left join lateral (
-      select rating
+      select rating_label
       from finnrick_ratings fr
       where fr.vendor_id = v.id
       order by fr.rated_at desc
@@ -987,6 +998,8 @@ export async function recordScrapeEvent(input: {
   message: string;
   payload?: Record<string, unknown>;
 }): Promise<void> {
+  const redactedPayload = redactSensitiveData(input.payload ?? {});
+
   await sql`
     insert into scrape_events (scrape_run_id, vendor_id, severity, code, message, payload)
     values (
@@ -995,7 +1008,7 @@ export async function recordScrapeEvent(input: {
       ${input.severity},
       ${input.code},
       ${input.message},
-      ${toJson(input.payload ?? {})}
+      ${toJson(redactedPayload)}
     )
   `;
 }
@@ -1052,6 +1065,32 @@ export async function markVendorPageScrape(input: {
   `;
 }
 
+export async function shouldSuppressNetworkFilterBlockedParseFailure(input: {
+  vendorId: string | null;
+  pageUrl: string | null;
+  networkFilterSignature: string | null;
+}): Promise<boolean> {
+  if (!input.networkFilterSignature || input.networkFilterSignature.trim().length === 0) {
+    return false;
+  }
+
+  const rows = await sql<{ suppressed: boolean }[]>`
+    select exists (
+      select 1
+      from review_queue
+      where queue_type = 'parse_failure'
+        and status in ('resolved', 'ignored')
+        and vendor_id is not distinct from ${input.vendorId}
+        and page_url is not distinct from ${input.pageUrl}
+        and payload ->> 'reason' = 'network_filter_blocked'
+        and payload ->> 'networkFilterSignature' = ${input.networkFilterSignature}
+        and coalesce(resolved_at, updated_at, created_at) >= now() - (${getNetworkFilterQueueSuppressionDays()} * interval '1 day')
+    ) as suppressed
+  `;
+
+  return rows[0]?.suppressed ?? false;
+}
+
 export async function createReviewQueueItem(input: {
   type: ReviewQueueType;
   status?: ReviewQueueStatus;
@@ -1062,6 +1101,38 @@ export async function createReviewQueueItem(input: {
   confidence?: number | null;
   payload?: Record<string, unknown>;
 }): Promise<string> {
+  const redactedPayload = redactSensitiveData(input.payload ?? {});
+
+  if (input.type === "parse_failure") {
+    const existingRows = await sql<
+      {
+        id: string;
+      }[]
+    >`
+      select id
+      from review_queue
+      where queue_type = ${input.type}
+        and status in ('open', 'in_progress')
+        and vendor_id is not distinct from ${input.vendorId ?? null}
+        and page_url is not distinct from ${input.pageUrl ?? null}
+      order by created_at asc
+      limit 1
+    `;
+
+    const existing = existingRows[0];
+    if (existing) {
+      await sql`
+        update review_queue
+        set confidence = ${input.confidence ?? null},
+            payload = ${toJson(redactedPayload)},
+            updated_at = now()
+        where id = ${existing.id}
+      `;
+
+      return existing.id;
+    }
+  }
+
   if (input.type === "alias_match" && input.rawText && input.rawText.trim().length > 0) {
     const existingRows = await sql<
       {
@@ -1084,7 +1155,7 @@ export async function createReviewQueueItem(input: {
       await sql`
         update review_queue
         set confidence = ${input.confidence ?? null},
-            payload = ${toJson(input.payload ?? {})},
+            payload = ${toJson(redactedPayload)},
             updated_at = now()
         where id = ${existing.id}
       `;
@@ -1116,7 +1187,7 @@ export async function createReviewQueueItem(input: {
       ${input.rawText ?? null},
       ${input.suggestedCompoundId ?? null},
       ${input.confidence ?? null},
-      ${toJson(input.payload ?? {})}
+      ${toJson(redactedPayload)}
     )
     returning id
   `;

@@ -1,5 +1,228 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
+## Continuation Snapshot (2026-02-20, robustness rerun + live suppression validation + Finnrick ratings range)
+### Code/policy update
+- Deterministic `network_filter_blocked` queue handling uses hybrid suppression:
+  - compute/store `networkFilterSignature` on parse-failure/event payloads;
+  - suppress repeated identical triaged queue inserts for `(vendor_id, page_url, reason, networkFilterSignature)` within cooldown window (`NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS`, default `14`);
+  - preserve visibility via emitted `NETWORK_FILTER_BLOCKED` events and `parseFailureQueueSuppressed` metadata.
+- Finnrick ingestion now parses the `Ratings range` column directly and stores/serves textual labels (`A`, `A to C`, `N/A`) for UI display.
+
+### Robustness cycle
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`80` tests)
+- `npm run job:vendors`:
+  - run `89043ac0-e797-49c2-9755-7f928a203c6a`
+  - status `partial`
+  - `pagesTotal=53`, `pagesSuccess=31`, `pagesFailed=22`
+  - `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=823`
+  - `offersExcludedByRule=328`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=370`, `aiTasksQueued=22`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`, `leftOpen=0`)
+- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline run `89043ac0-e797-49c2-9755-7f928a203c6a`)
+- Live suppression-validation run (vendor-scoped):
+  - `c1f47324-133c-4ff5-826f-a98f82392fa4` (`Amino Asylum`)
+  - outcome: `NETWORK_FILTER_BLOCKED` event emitted with `parseFailureQueueSuppressed=true`; no new open parse-failure queue row created.
+
+### Event profile in run `89043ac0-e797-49c2-9755-7f928a203c6a`
+- `ALIAS_SKIPPED_AI=370`
+- `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT=328`
+- `DISCOVERY_ATTEMPT_FAILED=126`
+- `DISCOVERY_SOURCE=31`
+- `NETWORK_FILTER_BLOCKED=21`
+- `DISCOVERY_REUSED_ORIGIN=7`
+- `INVALID_PRICING_PAYLOAD=1`
+
+### Queue/coverage snapshot after rerun
+- Alias queue (`queue_type='alias_match'`): `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
+- Parse-failure queue (`queue_type='parse_failure'`): `open=21`
+  - `network_filter_blocked=20`
+  - `invalid_pricing_payload=1`
+  - `discovery_fetch_failed=0` (prior `elitepeptides.com` outlier reclassified/triaged)
+- Network-filter signature completeness on open blocked rows: `20/20`.
+- Coverage remains `45` active vendors / `53` active vendor pages.
+- `thymosin-alpha-1` coverage: `27` vendors / `28` active offers.
+
+### Finnrick status
+- `npm run job:finnrick`:
+  - run `28ce6525-14ce-4cfc-b043-83f9440944ea`
+  - status `success`
+  - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
+  - latest-vendor labels include `0` numeric-style (`x/5`) values.
+
+### Security CI runtime validation status
+- `gh` auth is valid (`repo` + `workflow` scopes).
+- Remote run/log verification is performed after branch push (see latest handoff status for current run IDs).
+
+## Continuation Snapshot (2026-02-17, rerun + legacy queue cleanup + Finnrick sync)
+### Robustness cycle
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`78` tests)
+- `npm run job:vendors`:
+  - run `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`
+  - status `partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=849`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`, `leftOpen=0`)
+- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline run `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`)
+
+### Parse-failure queue cleanup
+- Legacy open `no_offers_found` rows (`4`) were resolved/ignored:
+  - `http://eliteresearchusa.com/`
+  - `https://eliteresearchusa.com/products`
+  - `https://www.alphagresearch.com/`
+  - `https://dragonpharmastore.com/`
+- Update tag: `resolved_by='system_legacy_no_offers_cleanup'`.
+- Open parse-failure queue now:
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+
+### Event profile in run `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`
+- `NETWORK_FILTER_BLOCKED=20`
+- `DISCOVERY_ATTEMPT_FAILED=120`
+- `INVALID_PRICING_PAYLOAD=1`
+- `ALIAS_SKIPPED_AI=376`
+- `OFFER_EXCLUDED_SCOPE_SINGLE_UNIT=325`
+- `QUALITY_INVARIANT_EVALUATED=1`
+- `TOP_COMPOUND_SMOKE_EVALUATED=1`
+
+### Invariant/smoke verification
+- `thymosin-alpha-1` remains stable at `27` vendors / `27` active offers.
+- Guardrail summary remains pass-only (`criticalFailures=[]`).
+
+### Security CI validation status
+- Workflow file remains configured at `.github/workflows/security-ci.yml` for:
+  - full-history `gitleaks` scan
+  - dependency gate `npm audit --audit-level=high`
+- Local gate command result in this pass:
+  - `npm audit --audit-level=high` -> `0` vulnerabilities
+- Remote run-status validation caveat:
+  - `gh` CLI is unauthenticated in this environment, so GitHub Actions run/log confirmation is blocked until `gh auth login`.
+
+### Finnrick sync
+- `npm run job:finnrick` executed per explicit request:
+  - run `084b323c-6472-4554-b11f-d0aa19f0889c`
+  - status `success`
+  - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
+
+## Continuation Snapshot (2026-02-17, network-filter classification + parse-failure dedupe)
+### Robustness cycle
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`78` tests)
+- `npm run job:vendors`:
+  - run `44b03125-50f7-4e89-b1a5-28e35d8ddba1`
+  - status `partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=849`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`, `leftOpen=0`)
+- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline run `44b03125-50f7-4e89-b1a5-28e35d8ddba1`)
+
+### Regression-cluster diagnosis update (20 pages)
+- Deterministic root-cause evidence now captured:
+  - affected roots return all-source transport failures (`fetch failed | read ECONNRESET | code=ECONNRESET`) in discovery attempts;
+  - follow-up HTTP probes detect Meraki blocked redirects (`wired.meraki.com/blocked.cgi`, category `bs_047`) for the same domains.
+- Classification update shipped:
+  - no-offers fallback for this signature is now `NETWORK_FILTER_BLOCKED` / `network_filter_blocked` / `no_data_network_filter_blocked`.
+  - non-probeable transport failures still fall back to `DISCOVERY_FETCH_FAILED`.
+- Metadata payload quality for blocked roots now includes:
+  - `networkFilterProvider`, `networkFilterCategory`, `networkFilterLocation`
+  - `networkFilterBlockedServer`, `networkFilterBlockedUrl`
+  - `networkFilterStatus`, `networkFilterProbeUrl`
+  - `discoveryFetchFailedSources`, `discoveryFetchFailedErrors`
+
+### Event + queue deltas
+- Event counts in run `44b03125-50f7-4e89-b1a5-28e35d8ddba1`:
+  - `NETWORK_FILTER_BLOCKED=20`
+  - `DISCOVERY_ATTEMPT_FAILED=120`
+  - `INVALID_PRICING_PAYLOAD=1`
+  - `DISCOVERY_SOURCE=32`
+  - `DISCOVERY_REUSED_ORIGIN=7`
+- Parse-failure queue after dedupe hardening + one-time cleanup:
+  - `open=25` (`network_filter_blocked=20`, `invalid_pricing_payload=1`, `no_offers_found=4`)
+  - dedupe cleanup effect: `96 -> 25` open rows (`71` duplicates marked `ignored`, `resolved_by='system_parse_failure_dedupe'`).
+- Metadata completeness:
+  - `network_filter_blocked`: `20/20` complete (`provider/category/location` present)
+  - `safe_mode_cloudflare_blocked`: `0/0` open in current queue
+
+### Residual open parse-failure rows (legacy no-offers targets)
+- `no_offers_found` rows left open (`4`) are historical targets outside the current 20-page cluster:
+  - `https://dragonpharmastore.com/`
+  - `https://www.alphagresearch.com/`
+  - `https://eliteresearchusa.com/products`
+  - `http://eliteresearchusa.com/`
+
+## Continuation Snapshot (2026-02-17, transport-failure reclassification + rerun)
+### Robustness cycle
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`77` tests)
+- `npm run job:vendors`:
+  - run `7512b41f-ee44-4e86-9e1f-b7a4daf786e2`
+  - status `partial`
+  - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
+  - `offersCreated=0`, `offersUpdated=0`, `offersUnchanged=849`
+  - `offersExcludedByRule=325`
+  - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+  - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
+- `npm run job:review-ai -- --limit=50`: pass (`itemsScanned=0`, `leftOpen=0`)
+- `npm run job:smoke-top-compounds`: pass (`failureCount=0`, baseline run `7512b41f-ee44-4e86-9e1f-b7a4daf786e2`)
+
+### Regression-cluster diagnosis (20 pages)
+- Existing `NO_OFFERS` cluster root cause is now explicit:
+  - all affected pages failed all three discovery sources with transport errors (now logged as `fetch failed | read ECONNRESET | code=ECONNRESET`);
+  - this is not currently a parsing/selector mismatch signature.
+- Code/runtime hardening now applied:
+  - worker retries discovery once on all-source transport-failure signatures before fallback;
+  - unresolved repeats are now classified as `DISCOVERY_FETCH_FAILED` with parse-failure reason `discovery_fetch_failed`;
+  - parse-failure payload now stores complete source/error arrays for deterministic triage.
+
+### Event + queue deltas
+- Event counts in run `7512b41f-ee44-4e86-9e1f-b7a4daf786e2`:
+  - `DISCOVERY_FETCH_FAILED=20`
+  - `DISCOVERY_ATTEMPT_FAILED=120` (first pass + retry pass attempt logs)
+  - `INVALID_PRICING_PAYLOAD=1`
+  - `DISCOVERY_SOURCE=32`
+  - `DISCOVERY_REUSED_ORIGIN=7`
+- Parse-failure queue snapshot after rerun:
+  - `open=75` (`discovery_fetch_failed=20`, `invalid_pricing_payload=8`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
+- Metadata completeness checks:
+  - cloudflare blocked rows: `3/3` complete (`safeModeBlockProvider/status/source` present)
+  - discovery-fetch-failed rows from this run: `20/20` complete (`discoveryFetchFailedSources` + `discoveryFetchFailedErrors` arrays present)
+
+### Failed-page profile in run `7512b41f-ee44-4e86-9e1f-b7a4daf786e2`
+- `DISCOVERY_FETCH_FAILED` (`20`):
+  - `https://aminoasylumllc.com/`
+  - `https://amplifypeptides.com/`
+  - `https://atomiklabz.com/`
+  - `https://biolongevitylabs.com/`
+  - `https://www.biopepz.net/`
+  - `https://coastalpeptides.com/`
+  - `https://crushresearch.com/`
+  - `https://dragonpharmastore.com/64-peptides`
+  - `https://elitepeptides.com/`
+  - `https://erospeptides.com/`
+  - `https://hkroids.com/`
+  - `https://kits4less.com/`
+  - `https://peptidesworld.com/`
+  - `https://purapeptides.com/`
+  - `https://purepeptidelabs.shop/`
+  - `https://purepeps.com/`
+  - `https://purerawz.co/`
+  - `https://simplepeptide.com/`
+  - `https://thepeptidehaven.com/`
+  - `https://trustedpeptide.net/`
+- `INVALID_PRICING_PAYLOAD` (`1`):
+  - `https://peptiatlas.com/`
+
 ## Continuation Snapshot (2026-02-17, smoke-fix rerun + queue closure)
 ### Smoke regression remediation (`thymosin-alpha-1 24 -> 0`)
 - Root cause identified:

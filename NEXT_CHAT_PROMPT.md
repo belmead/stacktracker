@@ -1,6 +1,6 @@
 # Next Chat Prompt
 
-Continue from `/Users/belmead/Documents/stacktracker` on branch `codex/mvp-scaffold` at the latest commit.
+Continue from `/Users/belmead/Documents/stacktracker` on branch `codex/mvp-scaffold` with the current working tree changes intact.
 
 Start by reading:
 - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
@@ -10,88 +10,61 @@ Start by reading:
 - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
 - `/Users/belmead/Documents/stacktracker/NEXT_CHAT_PROMPT.md`
 
-Current state to assume:
+Current verified state:
 1. Coverage:
    - active vendors: `45`
    - active vendor pages: `53`
 2. Alias queue (`queue_type='alias_match'`):
    - `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
-3. Parse-failure queue:
-   - `queue_type='parse_failure'`: `open=54`
-   - reason buckets: `invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`
+3. Parse-failure queue (`queue_type='parse_failure'`):
+   - `open=22`
+   - `network_filter_blocked=20`
+   - `discovery_fetch_failed=1` (`https://elitepeptides.com/`)
+   - `invalid_pricing_payload=1` (`https://peptiatlas.com/`)
 4. Latest vendor run:
-   - `425efba4-127e-4792-903d-8113bf45c206` (`status=partial`)
-   - `pagesTotal=53`, `pagesSuccess=32`, `pagesFailed=21`
-   - `offersCreated=1`, `offersUpdated=29`, `offersUnchanged=822`
-   - `offersExcludedByRule=325`
-   - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
+   - `99ba0dab-5eec-4836-a078-44eb46a1d835` (`status=partial`)
+   - `pagesTotal=53`, `pagesSuccess=31`, `pagesFailed=22`
+   - `offersCreated=16`, `offersUpdated=5`, `offersUnchanged=802`
+   - `offersExcludedByRule=328`
+   - `unresolvedAliases=0`, `aliasesSkippedByAi=370`, `aiTasksQueued=22`
    - quality guardrails: `invariant=pass`, `drift=pass`, `smoke=pass`
-5. Smoke regression (`thymosin-alpha-1 24 -> 0`) is fixed:
-   - Root cause was top-`N` snapshot omission in smoke comparison, not actual offer loss.
-   - Current live `thymosin-alpha-1` coverage is `27` vendors / `27` active offers.
-   - Hydration fix is in both:
-     - `lib/scraping/worker.ts`
-     - `scripts/run-top-compounds-smoke-test.ts`
-6. Parse-failure metadata backfill:
-   - legacy open cloudflare-block rows were backfilled for provider/status/source completeness (`3/3` complete).
-7. Latest smoke command:
-   - `npm run job:smoke-top-compounds` passes (`failureCount=0`, baseline `425efba4-127e-4792-903d-8113bf45c206`)
-8. Latest Finnrick run:
-   - `5233e9be-24fb-42ba-9084-2e8dde507589` (do not rerun unless explicitly requested)
-9. Most notable new issue:
-   - 20 vendor roots now emitted `NO_OFFERS` + `DISCOVERY_ATTEMPT_FAILED` with `no_offers_found` in the latest run:
-     - `https://aminoasylumllc.com/`
-     - `https://amplifypeptides.com/`
-     - `https://atomiklabz.com/`
-     - `https://biolongevitylabs.com/`
-     - `https://www.biopepz.net/`
-     - `https://coastalpeptides.com/`
-     - `https://crushresearch.com/`
-     - `https://dragonpharmastore.com/64-peptides`
-     - `https://elitepeptides.com/`
-     - `https://erospeptides.com/`
-     - `https://hkroids.com/`
-     - `https://kits4less.com/`
-     - `https://peptidesworld.com/`
-     - `https://purapeptides.com/`
-     - `https://purepeptidelabs.shop/`
-     - `https://purepeps.com/`
-     - `https://purerawz.co/`
-     - `https://simplepeptide.com/`
-     - `https://thepeptidehaven.com/`
-     - `https://trustedpeptide.net/`
-   - `https://peptiatlas.com/` remains expected `INVALID_PRICING_PAYLOAD`.
+5. Event profile for latest run:
+   - `NETWORK_FILTER_BLOCKED=20`
+   - `DISCOVERY_FETCH_FAILED=1`
+   - `DISCOVERY_ATTEMPT_FAILED=126`
+   - `INVALID_PRICING_PAYLOAD=1`
+6. Smoke reliability:
+   - `thymosin-alpha-1` coverage is `27` vendors / `28` active offers
+   - smoke script passes against baseline `99ba0dab-5eec-4836-a078-44eb46a1d835`
+7. Hybrid deterministic network-filter policy now implemented:
+   - parse-failure payload includes `networkFilterSignature`
+   - repeated triaged identical signatures are queue-suppressed for `NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS` (default `14`)
+   - events preserve visibility via `networkFilterSignature` + `parseFailureQueueSuppressed`
+8. Security CI status:
+   - workflow file exists locally at `.github/workflows/security-ci.yml`
+   - local `npm audit --audit-level=high` passes (`0` vulnerabilities)
+   - `gh auth status` is authenticated
+   - remote `belmead/stacktracker` currently has no Actions workflows/runs, so `Security CI` run/log verification is blocked until workflow files are pushed
+9. Latest Finnrick run:
+   - `084b323c-6472-4554-b11f-d0aa19f0889c`
+   - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
+   - unmatched vendors correctly remain `N/A`
 
 Primary tasks for next chat:
-1. Install recommended Codex skills first (via `skill-installer`):
-   - list curated skills, then install:
-     - `security-best-practices`
-     - `security-threat-model`
-     - `security-ownership-map`
-     - `gh-fix-ci`
-     - `playwright`
-     - `doc`
-   - after install, remind user to restart Codex so new skills load.
-2. Investigate the 20-page `no_offers_found` regression cluster:
-   - determine whether this is target URL drift, discovery source regression, anti-bot/access behavior, or HTML/API parsing regression;
-   - prioritize deterministic fixes that restore prior successful coverage while preserving strict scope and no-noise policy.
-3. Keep smoke reliability strict:
-   - preserve the baseline-slug hydration behavior for smoke checks;
-   - ensure future snapshots don’t reintroduce false zero-vendor comparisons.
-4. Parse-failure queue quality:
-   - keep blocked-site payload metadata complete for new rows;
-   - triage reason buckets to reduce recurring `no_offers_found` noise where deterministic fixes are possible.
-5. Re-run robustness cycle after fixes:
+1. Validate hybrid suppression behavior in live queue flow:
+   - confirm repeated deterministic `network_filter_blocked` signatures stay event-visible while avoiding duplicate parse-failure queue churn after triage.
+2. Investigate and remediate the single `discovery_fetch_failed` outlier (`https://elitepeptides.com/`) if deterministic cause is identified.
+3. Validate GitHub Actions Security CI remotely once workflow files are available in GitHub:
+   - confirm `gitleaks` + `npm audit --audit-level=high` job statuses/logs.
+4. Preserve smoke hydration and parse-failure dedupe/suppression behavior while making any follow-up changes.
+5. Re-run robustness cycle after any code changes:
    - `npm run typecheck`
    - `npm run lint`
    - `npm run test`
    - `npm run job:vendors`
    - `npm run job:review-ai -- --limit=50`
    - `npm run job:smoke-top-compounds`
-6. Start implementation of production security hardening (not just planning):
-   - add CI secret scanning and dependency-vuln gating;
-   - enforce log/event secret-redaction guarantees;
-   - validate least-privilege runtime DB credential model.
+6. Re-run Finnrick only if onboarding scope changes or explicitly requested.
 7. Update docs after completion:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
    - `/Users/belmead/Documents/stacktracker/HANDOFF.md`

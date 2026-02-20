@@ -1,4 +1,8 @@
 import { env } from "@/lib/env";
+import {
+  detectSafeModeAccessBlockedResponse,
+  formatSafeModeAccessBlockedError
+} from "@/lib/scraping/access-blocks";
 import { extractOffersFromHtml } from "@/lib/scraping/extractors";
 import { buildExtractedOffer } from "@/lib/scraping/normalize";
 import type { ExtractedOffer } from "@/lib/types";
@@ -165,6 +169,51 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function formatDiscoveryError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "unknown";
+  }
+
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [error];
+  const parts: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (current instanceof Error) {
+      const message = current.message.trim();
+      if (message.length > 0 && !parts.includes(message)) {
+        parts.push(message);
+      }
+
+      const code = (current as Error & { code?: string }).code;
+      if (typeof code === "string" && code.length > 0) {
+        const normalizedCode = `code=${code}`;
+        if (!parts.includes(normalizedCode)) {
+          parts.push(normalizedCode);
+        }
+      }
+
+      const cause = (current as Error & { cause?: unknown }).cause;
+      if (cause) {
+        queue.push(cause);
+      }
+    }
+  }
+
+  const combined = parts.join(" | ").trim();
+  if (!combined) {
+    return "unknown";
+  }
+
+  return combined.slice(0, 240);
+}
+
 function isTransientHttpStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
@@ -205,6 +254,24 @@ async function fetchJson(url: string): Promise<FetchJsonResult> {
       );
 
       const text = await response.text();
+      const bodyText = text.toLowerCase();
+      const safeModeBlocked = detectSafeModeAccessBlockedResponse({
+        statusCode: response.status,
+        serverHeader: response.headers.get("server")?.toLowerCase() ?? "",
+        bodyText,
+        cfRay: response.headers.get("cf-ray")
+      });
+
+      if (safeModeBlocked && safeModeBlocked.statusCode !== null) {
+        throw new Error(
+          formatSafeModeAccessBlockedError({
+            provider: safeModeBlocked.provider,
+            statusCode: safeModeBlocked.statusCode,
+            cfRay: safeModeBlocked.cfRay
+          })
+        );
+      }
+
       const payload = text.trim()
         ? (() => {
             try {
@@ -961,7 +1028,7 @@ export async function discoverOffers(input: {
       success: false,
       offers: 0,
       durationMs: Date.now() - wooStartedAt,
-      error: error instanceof Error ? error.message : "unknown"
+      error: formatDiscoveryError(error)
     });
   }
 
@@ -990,7 +1057,7 @@ export async function discoverOffers(input: {
       success: false,
       offers: 0,
       durationMs: Date.now() - shopifyStartedAt,
-      error: error instanceof Error ? error.message : "unknown"
+      error: formatDiscoveryError(error)
     });
   }
 
@@ -1046,7 +1113,7 @@ export async function discoverOffers(input: {
       success: false,
       offers: 0,
       durationMs: Date.now() - htmlStartedAt,
-      error: error instanceof Error ? error.message : "unknown"
+      error: formatDiscoveryError(error)
     });
   }
 
@@ -1090,7 +1157,7 @@ export async function discoverOffers(input: {
         success: false,
         offers: 0,
         durationMs: Date.now() - firecrawlStartedAt,
-        error: error instanceof Error ? error.message : "unknown"
+        error: formatDiscoveryError(error)
       });
     }
   }

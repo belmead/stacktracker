@@ -77,7 +77,7 @@ export default async function VendorPage({ params, searchParams }: VendorPagePro
         </p>
         <p>
           Finnrick:{" "}
-          <span className="rating-badge">{vendor.finnrickRating === null ? "N/A" : vendor.finnrickRating.toFixed(1)}</span>
+          <span className="rating-badge">{vendor.finnrickRating ?? "N/A"}</span>
         </p>
         <p>
           <LocalTimeLabel isoTimestamp={vendor.lastUpdatedAt} />

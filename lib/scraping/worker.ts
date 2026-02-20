@@ -10,6 +10,7 @@ import {
   getActiveScrapeTargets,
   pruneOperationalNoiseData,
   getVendorScrapeTargets,
+  shouldSuppressNetworkFilterBlockedParseFailure,
   markVendorPageScrape,
   reconcileStaleScrapeRuns,
   recordScrapeEvent,
@@ -28,6 +29,13 @@ import {
 import { env } from "@/lib/env";
 import { loadManualOfferExclusions } from "@/lib/exclusions/manual-offer-exclusions";
 import { computeMetricPrices, resolveVariantTotals } from "@/lib/metrics";
+import {
+  detectSafeModeAccessBlockedResponse,
+  formatSafeModeAccessBlockedError,
+  formatSafeModeProviderLabel,
+  parseSafeModeAccessBlockedError,
+  type SafeModeAccessBlockDetails
+} from "@/lib/scraping/access-blocks";
 import { createDiscoveryCache, discoverOffers } from "@/lib/scraping/discovery";
 import { detectSingleUnitOfferExclusion, parseProductName } from "@/lib/scraping/normalize";
 import {
@@ -147,82 +155,9 @@ function isTransientDatabaseError(error: unknown): boolean {
   );
 }
 
-const SAFE_MODE_ACCESS_BLOCKED_MARKER = "safe_mode_access_blocked";
-const LEGACY_CLOUDFLARE_CHALLENGE_MARKER = "cloudflare_challenge_safe_mode";
-
-interface SafeModeAccessBlockDetails {
-  provider: string;
-  statusCode: number | null;
-  cfRay: string | null;
-}
-
 interface SafeModeAccessBlockAttempt extends SafeModeAccessBlockDetails {
   source: string;
   error: string;
-}
-
-function isCloudflareChallengeResponse(input: {
-  serverHeader: string;
-  bodyText: string;
-  cfRay: string | null;
-}): boolean {
-  return (
-    Boolean(input.cfRay) ||
-    input.serverHeader.includes("cloudflare") ||
-    input.bodyText.includes("/cdn-cgi/") ||
-    input.bodyText.includes("/cdn-cgi/challenge-platform/") ||
-    input.bodyText.includes("attention required") ||
-    input.bodyText.includes("just a moment")
-  );
-}
-
-function formatSafeModeAccessBlockedError(input: {
-  provider: string;
-  statusCode: number;
-  cfRay: string | null;
-}): string {
-  const parts = [
-    SAFE_MODE_ACCESS_BLOCKED_MARKER,
-    `provider=${input.provider}`,
-    `status=${input.statusCode}`
-  ];
-
-  if (input.provider === "cloudflare") {
-    parts.push(LEGACY_CLOUDFLARE_CHALLENGE_MARKER);
-  }
-
-  if (input.cfRay) {
-    parts.push(`cf-ray=${input.cfRay}`);
-  }
-
-  return `HTTP ${input.statusCode} (${parts.join("; ")})`;
-}
-
-function parseSafeModeAccessBlockedError(errorMessage: string): SafeModeAccessBlockDetails | null {
-  const message = errorMessage.toLowerCase();
-  const hasNormalizedMarker = message.includes(SAFE_MODE_ACCESS_BLOCKED_MARKER);
-  const hasLegacyCloudflareMarker = message.includes(LEGACY_CLOUDFLARE_CHALLENGE_MARKER);
-
-  if (!hasNormalizedMarker && !hasLegacyCloudflareMarker) {
-    return null;
-  }
-
-  const providerMatch = errorMessage.match(/provider=([a-z0-9_-]+)/i);
-  let provider = providerMatch?.[1]?.toLowerCase() ?? "unknown";
-  if (hasLegacyCloudflareMarker || message.includes("cloudflare")) {
-    provider = "cloudflare";
-  }
-
-  const statusMatch = errorMessage.match(/status=(\d{3})/i) ?? errorMessage.match(/HTTP\s+(\d{3})/i);
-  const parsedStatus = statusMatch ? Number.parseInt(statusMatch[1], 10) : Number.NaN;
-
-  const cfRayMatch = errorMessage.match(/cf-ray=([a-z0-9-]+)/i);
-
-  return {
-    provider,
-    statusCode: Number.isFinite(parsedStatus) ? parsedStatus : null,
-    cfRay: cfRayMatch?.[1] ?? null
-  };
 }
 
 function findSafeModeAccessBlockedAttempt(attempts: DiscoveryAttemptLog[]): SafeModeAccessBlockAttempt | null {
@@ -248,16 +183,190 @@ function findSafeModeAccessBlockedAttempt(attempts: DiscoveryAttemptLog[]): Safe
   return null;
 }
 
-function formatSafeModeProviderLabel(provider: string | null): string {
-  if (!provider) {
-    return "unknown provider";
+interface DiscoveryFetchFailureSummary {
+  sources: string[];
+  errors: string[];
+}
+
+interface NetworkFilterBlockProbeResult {
+  provider: string;
+  category: string | null;
+  blockLocation: string | null;
+  blockedServer: string | null;
+  blockedUrl: string | null;
+  statusCode: number;
+  probeUrl: string;
+}
+
+function normalizeNetworkFilterSignaturePart(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "unknown";
   }
 
-  if (provider === "cloudflare") {
-    return "Cloudflare";
+  const normalized = String(value).trim().toLowerCase();
+  return normalized.length > 0 ? normalized : "unknown";
+}
+
+function normalizeNetworkFilterBlockedHost(blockedUrl: string | null): string | null {
+  if (!blockedUrl) {
+    return null;
   }
 
-  return provider;
+  try {
+    return new URL(blockedUrl).hostname.toLowerCase();
+  } catch {
+    return blockedUrl.trim().toLowerCase();
+  }
+}
+
+function buildNetworkFilterSignature(networkFilterBlock: NetworkFilterBlockProbeResult | null): string | null {
+  if (!networkFilterBlock) {
+    return null;
+  }
+
+  return [
+    normalizeNetworkFilterSignaturePart(networkFilterBlock.provider),
+    normalizeNetworkFilterSignaturePart(networkFilterBlock.category),
+    normalizeNetworkFilterSignaturePart(networkFilterBlock.blockedServer),
+    normalizeNetworkFilterSignaturePart(normalizeNetworkFilterBlockedHost(networkFilterBlock.blockedUrl)),
+    normalizeNetworkFilterSignaturePart(networkFilterBlock.statusCode)
+  ].join("|");
+}
+
+function isLikelyNetworkFetchFailureMessage(errorMessage: string): boolean {
+  const message = errorMessage.toLowerCase();
+  return (
+    message.includes("fetch failed") ||
+    message.includes("enotfound") ||
+    message.includes("econnreset") ||
+    message.includes("econnrefused") ||
+    message.includes("etimedout") ||
+    message.includes("socket hang up") ||
+    message.includes("networkerror") ||
+    message.includes("tls") ||
+    message.includes("certificate")
+  );
+}
+
+function summarizeDiscoveryFetchFailure(attempts: DiscoveryAttemptLog[]): DiscoveryFetchFailureSummary | null {
+  const discoveryAttempts = attempts.filter((attempt) =>
+    attempt.source === "woocommerce_store_api" ||
+    attempt.source === "shopify_products_api" ||
+    attempt.source === "html"
+  );
+
+  if (discoveryAttempts.length === 0) {
+    return null;
+  }
+
+  const attemptsWithErrors = discoveryAttempts.filter(
+    (attempt) => typeof attempt.error === "string" && attempt.error.trim().length > 0
+  );
+
+  if (attemptsWithErrors.length !== discoveryAttempts.length) {
+    return null;
+  }
+
+  if (!attemptsWithErrors.every((attempt) => isLikelyNetworkFetchFailureMessage(attempt.error!))) {
+    return null;
+  }
+
+  return {
+    sources: attemptsWithErrors.map((attempt) => attempt.source),
+    errors: attemptsWithErrors.map((attempt) => attempt.error ?? "")
+  };
+}
+
+function parseMerakiBlockLocation(locationValue: string): {
+  category: string | null;
+  blockedServer: string | null;
+  blockedUrl: string | null;
+} | null {
+  try {
+    const locationUrl = new URL(locationValue);
+    const host = locationUrl.hostname.toLowerCase();
+    if (!host.includes("meraki.com") || !locationUrl.pathname.includes("blocked.cgi")) {
+      return null;
+    }
+
+    const blockedCategories = locationUrl.searchParams.get("blocked_categories");
+    const blockedServer = locationUrl.searchParams.get("blocked_server");
+    const blockedUrl = locationUrl.searchParams.get("blocked_url");
+
+    return {
+      category: blockedCategories && blockedCategories.trim().length > 0 ? blockedCategories.trim() : null,
+      blockedServer: blockedServer && blockedServer.trim().length > 0 ? blockedServer.trim() : null,
+      blockedUrl: blockedUrl && blockedUrl.trim().length > 0 ? blockedUrl.trim() : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function probeNetworkFilterBlock(pageUrl: string): Promise<NetworkFilterBlockProbeResult | null> {
+  if (process.env.NODE_ENV === "test") {
+    return null;
+  }
+
+  let parsedPageUrl: URL;
+  try {
+    parsedPageUrl = new URL(pageUrl);
+  } catch {
+    return null;
+  }
+
+  const probeUrl = `http://${parsedPageUrl.hostname}/`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+
+  try {
+    const response = await fetch(probeUrl, {
+      headers: {
+        "user-agent": env.SCRAPER_USER_AGENT,
+        accept: "text/html,application/xhtml+xml"
+      },
+      redirect: "manual",
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    const location = response.headers.get("location");
+    if (location) {
+      const parsedLocation = parseMerakiBlockLocation(location);
+      if (parsedLocation) {
+        return {
+          provider: "meraki",
+          category: parsedLocation.category,
+          blockLocation: location,
+          blockedServer: parsedLocation.blockedServer,
+          blockedUrl: parsedLocation.blockedUrl,
+          statusCode: response.status,
+          probeUrl
+        };
+      }
+    }
+
+    if (response.status >= 400) {
+      const text = (await response.text().catch(() => "")).toLowerCase();
+      if (text.includes("blocked.cgi") || text.includes("blocked_categories=") || text.includes("meraki")) {
+        return {
+          provider: "meraki",
+          category: null,
+          blockLocation: location,
+          blockedServer: null,
+          blockedUrl: null,
+          statusCode: response.status,
+          probeUrl
+        };
+      }
+    }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return null;
 }
 
 async function fetchPageHtml(pageUrl: string): Promise<string> {
@@ -279,31 +388,30 @@ async function fetchPageHtml(pageUrl: string): Promise<string> {
       });
 
       if (!response.ok) {
+        const statusCode = response.status;
+        const safeModeBlocked = detectSafeModeAccessBlockedResponse({
+          statusCode,
+          serverHeader: response.headers.get("server")?.toLowerCase() ?? "",
+          bodyText:
+            statusCode === 401 || statusCode === 403 || statusCode === 429 || statusCode === 503
+              ? (await response.text().catch(() => "")).toLowerCase()
+              : "",
+          cfRay: response.headers.get("cf-ray")
+        });
+
+        if (safeModeBlocked && safeModeBlocked.statusCode !== null) {
+          throw new Error(
+            formatSafeModeAccessBlockedError({
+              provider: safeModeBlocked.provider,
+              statusCode: safeModeBlocked.statusCode,
+              cfRay: safeModeBlocked.cfRay
+            })
+          );
+        }
+
         if (attempt < maxAttempts && isTransientHttpStatus(response.status)) {
           await sleep(350 * attempt);
           continue;
-        }
-
-        if (response.status === 403) {
-          const serverHeader = response.headers.get("server")?.toLowerCase() ?? "";
-          const cfRay = response.headers.get("cf-ray");
-          const bodyText = (await response.text().catch(() => "")).toLowerCase();
-
-          if (
-            isCloudflareChallengeResponse({
-              serverHeader,
-              bodyText,
-              cfRay
-            })
-          ) {
-            throw new Error(
-              formatSafeModeAccessBlockedError({
-                provider: "cloudflare",
-                statusCode: 403,
-                cfRay
-              })
-            );
-          }
         }
 
         throw new Error(`HTTP ${response.status}`);
@@ -738,7 +846,7 @@ async function evaluateQualityGuardrails(input: {
     baselineTopCoverageRunId,
     formulationInvariants: [invariant],
     formulationDriftAlerts: [drift],
-    topCompoundCoverageSnapshot: normalizedTopCoverage,
+    topCompoundCoverageSnapshot: smokeCurrentCoverage,
     smokeCoverage,
     criticalFailures
   };
@@ -1443,7 +1551,7 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
         }
 
         let offers = [] as ExtractedOffer[];
-        const discovery = await discoverOffers({
+        let discovery = await discoverOffers({
           target: {
             vendorPageId: target.vendorPageId,
             vendorId: target.vendorId,
@@ -1454,6 +1562,32 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
           fetchPageHtml,
           cache: discoveryCache
         });
+
+        const initialDiscoveryFetchFailure = summarizeDiscoveryFetchFailure(discovery.attempts);
+        if (initialDiscoveryFetchFailure) {
+          // Retry once when all first-pass discovery sources fail on network transport.
+          await sleep(750);
+
+          const retryDiscovery = await discoverOffers({
+            target: {
+              vendorPageId: target.vendorPageId,
+              vendorId: target.vendorId,
+              vendorName: target.vendorName,
+              websiteUrl: target.websiteUrl,
+              pageUrl: target.pageUrl
+            },
+            fetchPageHtml,
+            cache: discoveryCache
+          });
+
+          discovery = {
+            offers: retryDiscovery.offers,
+            source: retryDiscovery.source,
+            origin: retryDiscovery.origin,
+            attempts: [...discovery.attempts, ...retryDiscovery.attempts],
+            diagnostics: [...discovery.diagnostics, ...retryDiscovery.diagnostics]
+          };
+        }
 
         offers = discovery.offers;
         applyDiscoveryAttemptTiming(pageSummary, discovery.attempts);
@@ -1484,30 +1618,74 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
           const safeModeAccessBlocked = Boolean(safeModeBlockedAttempt);
           const safeModeProvider = safeModeBlockedAttempt?.provider ?? null;
           const cloudflareSafeModeBlocked = safeModeProvider === "cloudflare";
+          const discoveryFetchFailure = summarizeDiscoveryFetchFailure(discovery.attempts);
+          const discoveryFetchFailed = Boolean(discoveryFetchFailure);
+          const networkFilterBlock = discoveryFetchFailed ? await probeNetworkFilterBlock(target.pageUrl) : null;
+          const networkFilterBlocked = Boolean(networkFilterBlock);
+          const networkFilterSignature = buildNetworkFilterSignature(networkFilterBlock);
+          const suppressNetworkFilterQueueNoise = networkFilterBlocked
+            ? await withDbTiming(pageSummary, () =>
+                shouldSuppressNetworkFilterBlockedParseFailure({
+                  vendorId: target.vendorId,
+                  pageUrl: target.pageUrl,
+                  networkFilterSignature
+                })
+              )
+            : false;
           const aiTaskReason = invalidPricingDiagnostic
             ? "invalid_pricing_payload"
             : cloudflareSafeModeBlocked
               ? "safe_mode_cloudflare_blocked"
               : safeModeAccessBlocked
                 ? "safe_mode_access_blocked"
-              : "empty_or_js_rendered";
+                : networkFilterBlocked
+                  ? "network_filter_blocked"
+                : discoveryFetchFailed
+                  ? "discovery_fetch_failed"
+                  : "empty_or_js_rendered";
           const noOffersReason = invalidPricingDiagnostic
             ? "invalid_pricing_payload"
             : cloudflareSafeModeBlocked
               ? "safe_mode_cloudflare_blocked"
               : safeModeAccessBlocked
                 ? "safe_mode_access_blocked"
-              : "no_offers_found";
-          const noOffersStatus = invalidPricingDiagnostic ? "no_data_invalid_pricing" : "no_data";
-          const noOffersEventCode = invalidPricingDiagnostic ? "INVALID_PRICING_PAYLOAD" : "NO_OFFERS";
+                : networkFilterBlocked
+                  ? "network_filter_blocked"
+                : discoveryFetchFailed
+                  ? "discovery_fetch_failed"
+                  : "no_offers_found";
+          const noOffersStatus = invalidPricingDiagnostic
+            ? "no_data_invalid_pricing"
+            : networkFilterBlocked
+              ? "no_data_network_filter_blocked"
+            : discoveryFetchFailed
+              ? "no_data_fetch_failed"
+              : "no_data";
+          const noOffersEventCode = invalidPricingDiagnostic
+            ? "INVALID_PRICING_PAYLOAD"
+            : networkFilterBlocked
+              ? "NETWORK_FILTER_BLOCKED"
+            : discoveryFetchFailed
+              ? "DISCOVERY_FETCH_FAILED"
+              : "NO_OFFERS";
           const safeModeBlockMessage = `Safe-mode fetch blocked by ${formatSafeModeProviderLabel(safeModeProvider)}`;
           const noOffersMessage = invalidPricingDiagnostic
             ? `Invalid pricing payload detected for ${target.pageUrl}`
             : safeModeAccessBlocked
               ? `${safeModeBlockMessage} for ${target.pageUrl}`
-              : `No offers parsed for ${target.pageUrl}`;
+              : networkFilterBlocked
+                ? `Network filter blocked access for ${target.pageUrl}`
+              : discoveryFetchFailed
+                ? `Discovery fetch failed for ${target.pageUrl}`
+                : `No offers parsed for ${target.pageUrl}`;
 
-          pageStatus = invalidPricingDiagnostic ? "invalid_pricing_payload" : "no_offers";
+          pageStatus = invalidPricingDiagnostic
+            ? "invalid_pricing_payload"
+            : networkFilterBlocked
+              ? "network_filter_blocked"
+            : discoveryFetchFailed
+              ? "discovery_fetch_failed"
+              : "no_offers";
           const taskId = await withDbTiming(pageSummary, () =>
             createAiAgentTask({
               vendorId: target.vendorId,
@@ -1521,28 +1699,43 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
           pageSummary.aiTasksQueued += 1;
           pageSummary.pagesFailed += 1;
 
-          await withDbTiming(pageSummary, () =>
-            createReviewQueueItem({
-              type: "parse_failure",
-              vendorId: target.vendorId,
-              pageUrl: target.pageUrl,
-              payload: {
-                taskId,
-                reason: noOffersReason,
-                diagnosticCode: invalidPricingDiagnostic?.code ?? null,
-                safeModeBlocked: safeModeAccessBlocked,
-                safeModeBlockProvider: safeModeProvider,
-                safeModeBlockStatus: safeModeBlockedAttempt?.statusCode ?? null,
-                safeModeBlockRayId: safeModeBlockedAttempt?.cfRay ?? null,
-                safeModeBlockSource: safeModeBlockedAttempt?.source ?? null,
-                safeModeBlockError: safeModeBlockedAttempt?.error ?? null,
-                cloudflareBlocked: cloudflareSafeModeBlocked,
-                cloudflareAttemptError: cloudflareSafeModeBlocked
-                  ? safeModeBlockedAttempt?.error ?? null
-                  : null
-              }
-            })
-          );
+          if (!suppressNetworkFilterQueueNoise) {
+            await withDbTiming(pageSummary, () =>
+              createReviewQueueItem({
+                type: "parse_failure",
+                vendorId: target.vendorId,
+                pageUrl: target.pageUrl,
+                payload: {
+                  taskId,
+                  reason: noOffersReason,
+                  diagnosticCode: invalidPricingDiagnostic?.code ?? null,
+                  safeModeBlocked: safeModeAccessBlocked,
+                  safeModeBlockProvider: safeModeProvider,
+                  safeModeBlockStatus: safeModeBlockedAttempt?.statusCode ?? null,
+                  safeModeBlockRayId: safeModeBlockedAttempt?.cfRay ?? null,
+                  safeModeBlockSource: safeModeBlockedAttempt?.source ?? null,
+                  safeModeBlockError: safeModeBlockedAttempt?.error ?? null,
+                  cloudflareBlocked: cloudflareSafeModeBlocked,
+                  cloudflareAttemptError: cloudflareSafeModeBlocked
+                    ? safeModeBlockedAttempt?.error ?? null
+                    : null,
+                  networkFilterBlocked,
+                  networkFilterSignature,
+                  networkFilterProvider: networkFilterBlock?.provider ?? null,
+                  networkFilterCategory: networkFilterBlock?.category ?? null,
+                  networkFilterLocation: networkFilterBlock?.blockLocation ?? null,
+                  networkFilterBlockedServer: networkFilterBlock?.blockedServer ?? null,
+                  networkFilterBlockedUrl: networkFilterBlock?.blockedUrl ?? null,
+                  networkFilterStatus: networkFilterBlock?.statusCode ?? null,
+                  networkFilterProbeUrl: networkFilterBlock?.probeUrl ?? null,
+                  parseFailureQueueSuppressed: suppressNetworkFilterQueueNoise,
+                  discoveryFetchFailed,
+                  discoveryFetchFailedSources: discoveryFetchFailure?.sources ?? [],
+                  discoveryFetchFailedErrors: discoveryFetchFailure?.errors ?? []
+                }
+              })
+            );
+          }
 
           await withDbTiming(pageSummary, () =>
             markVendorPageScrape({
@@ -1576,7 +1769,20 @@ export async function runVendorScrapeJob(input: VendorScrapeJobInput): Promise<{
                     cloudflareBlocked: cloudflareSafeModeBlocked,
                     cloudflareAttemptError: cloudflareSafeModeBlocked
                       ? safeModeBlockedAttempt?.error ?? null
-                      : null
+                      : null,
+                    networkFilterBlocked,
+                    networkFilterSignature,
+                    networkFilterProvider: networkFilterBlock?.provider ?? null,
+                    networkFilterCategory: networkFilterBlock?.category ?? null,
+                    networkFilterLocation: networkFilterBlock?.blockLocation ?? null,
+                    networkFilterBlockedServer: networkFilterBlock?.blockedServer ?? null,
+                    networkFilterBlockedUrl: networkFilterBlock?.blockedUrl ?? null,
+                    networkFilterStatus: networkFilterBlock?.statusCode ?? null,
+                    networkFilterProbeUrl: networkFilterBlock?.probeUrl ?? null,
+                    parseFailureQueueSuppressed: suppressNetworkFilterQueueNoise,
+                    discoveryFetchFailed,
+                    discoveryFetchFailedSources: discoveryFetchFailure?.sources ?? [],
+                    discoveryFetchFailedErrors: discoveryFetchFailure?.errors ?? []
                   }
             })
           );

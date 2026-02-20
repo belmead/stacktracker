@@ -87,11 +87,19 @@ All notable changes to Stack Tracker are documented in this file.
 - Worker no-offers regression tests:
   - `tests/unit/worker-no-offers.test.ts` validates `INVALID_PRICING_PAYLOAD` emission and preserved `NO_OFFERS` behavior.
   - `tests/unit/worker-no-offers.test.ts` now also validates provider-aware safe-mode access-block classification (`safe_mode_access_blocked` plus Cloudflare compatibility) and pre-aggregation single-unit exclusion behavior.
+  - `tests/unit/worker-no-offers.test.ts` now also validates `NETWORK_FILTER_BLOCKED` classification and metadata capture for deterministic network-filter redirects.
+  - `tests/unit/worker-no-offers.test.ts` now also validates repeated deterministic `NETWORK_FILTER_BLOCKED` queue-suppression behavior (skip duplicate parse-failure row, preserve event visibility).
 - Peptide page regression tests:
   - `tests/unit/peptide-page.test.ts` validates selected-variant average/low/high price summary rendering.
 - Smoke-coverage hydration helpers and regression tests:
   - `getMissingSmokeCoverageSlugs` + `mergeCoverageSnapshots` in `lib/scraping/quality-guardrails.ts`.
   - `tests/unit/quality-guardrails.test.ts` coverage for baseline-tracked slug hydration/merge behavior.
+- Shared safe-mode/access-block helpers:
+  - `lib/scraping/access-blocks.ts` now centralizes provider detection/parsing for Cloudflare/Imperva/Akamai/DataDome challenge responses.
+- Log/event secret-redaction utility:
+  - `lib/security/redaction.ts` with regression coverage in `tests/unit/redaction.test.ts`.
+- Security CI workflow:
+  - `.github/workflows/security-ci.yml` adds full-history `gitleaks` scanning and high/critical dependency gating via `npm audit --audit-level=high`.
 
 ### Changed
 - MVP single-unit scope enforcement is now active at ingestion:
@@ -250,8 +258,93 @@ All notable changes to Stack Tracker are documented in this file.
 - Top-compound smoke evaluation now hydrates missing baseline slugs:
   - Vendor guardrail evaluation and standalone smoke script now fetch current coverage for baseline-tracked compounds that fall outside current top-`N` ranking before computing smoke drops.
   - Prevents false zero-coverage failures when ranking churn drops a still-covered compound out of the current top snapshot (for example `thymosin-alpha-1` in run `e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`).
+- Discovery transport-failure handling is now explicit:
+  - full-source network failures are classified as `NETWORK_FILTER_BLOCKED` with parse-failure reason `network_filter_blocked` when deterministic Meraki blocked redirects are detected;
+  - fallback classification remains `DISCOVERY_FETCH_FAILED` with parse-failure reason `discovery_fetch_failed` when no blocked-site fingerprint is available;
+  - worker retries discovery once before fallback when this pattern occurs;
+  - parse-failure payloads include structured source/error arrays (`discoveryFetchFailedSources`, `discoveryFetchFailedErrors`) plus blocked-site metadata (`networkFilterProvider/category/location/server/url/status/probeUrl`).
+- Parse-failure queue creation now dedupes open/in-progress rows by `(vendor_id, page_url)` and refreshes payload metadata in place.
+- Deterministic `network_filter_blocked` queue handling now supports hybrid suppression:
+  - blocked signatures are fingerprinted via `networkFilterSignature`;
+  - repeated identical signatures on triaged `(vendor_id, page_url)` rows are suppressed for `NETWORK_FILTER_BLOCKED_QUEUE_SUPPRESSION_DAYS` (default `14`);
+  - event visibility is preserved with `networkFilterSignature` + `parseFailureQueueSuppressed` metadata.
+- Finnrick rating ingestion/display now uses Finnrick textual `Ratings range` labels end-to-end:
+  - parser reads dedicated `Ratings range` table column and normalizes values like `A`, `A to C`, `N/A`;
+  - home/peptide/vendor queries now source `finnrick_ratings.rating_label`;
+  - UI badges now render range labels directly instead of numeric formatting.
+- Discovery error payloads now preserve nested cause/code context (for example `fetch failed | read ECONNRESET | code=ECONNRESET`) instead of opaque `fetch failed`.
+- Guardrail summary snapshots now persist hydrated smoke coverage (`topCompoundCoverageSnapshot` uses hydrated smoke set) so baseline continuity preserves prior tracked slugs.
+- Runtime least-privilege credential model now supports:
+  - `DATABASE_RUNTIME_USER` assertion for runtime DB user wiring;
+  - `DATABASE_ADMIN_URL` split credential path for bootstrap/import scripts.
+- Dependency baseline patched for known Next.js CVEs:
+  - upgraded `next` and `eslint-config-next` from `15.1.6` to `15.5.12`.
 
 ### Verified
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`80` tests)
+  - `npm run job:vendors` -> `89043ac0-e797-49c2-9755-7f928a203c6a` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `89043ac0-e797-49c2-9755-7f928a203c6a`)
+- Latest run failure profile (`89043ac0-e797-49c2-9755-7f928a203c6a`):
+  - `21` pages with `NETWORK_FILTER_BLOCKED`
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Live suppression validation:
+  - vendor-scoped run `c1f47324-133c-4ff5-826f-a98f82392fa4` emitted `NETWORK_FILTER_BLOCKED` with `parseFailureQueueSuppressed=true`;
+  - no new open parse-failure row was created for the triaged `https://aminoasylumllc.com/` signature.
+- Parse-failure queue snapshot after rerun + live suppression check:
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+  - open `discovery_fetch_failed=0` (prior `elitepeptides.com` outlier reclassified/triaged).
+- Finnrick rerun + label audit:
+  - `npm run job:finnrick` -> `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`)
+  - latest-per-vendor Finnrick labels now contain `0` numeric-style values (`x/5`), confirming range-label migration.
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`79` tests)
+  - `npm run job:vendors` -> `99ba0dab-5eec-4836-a078-44eb46a1d835` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `99ba0dab-5eec-4836-a078-44eb46a1d835`)
+- Latest run failure profile (`99ba0dab-5eec-4836-a078-44eb46a1d835`):
+  - `20` pages with `NETWORK_FILTER_BLOCKED`
+  - `1` page with `DISCOVERY_FETCH_FAILED` (`https://elitepeptides.com/`)
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Parse-failure queue snapshot after latest run:
+  - `open=22` (`network_filter_blocked=20`, `discovery_fetch_failed=1`, `invalid_pricing_payload=1`)
+- `network_filter_blocked` metadata quality after latest run:
+  - signature coverage `20/20` (`payload.networkFilterSignature` populated)
+- Security CI remote validation status update:
+  - `gh auth status` is authenticated with `repo` + `workflow` scopes;
+  - remote `belmead/stacktracker` currently has no Actions workflows/runs, so `Security CI` run/log validation remains blocked until workflow files are pushed.
+- Latest robustness cycle completed with:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass (`78` tests)
+  - `npm audit --audit-level=high` pass (`0` vulnerabilities)
+  - `npm run job:vendors` -> `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3` (`status=partial`, guardrails `invariant=pass`, `drift=pass`, `smoke=pass`)
+  - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`)
+  - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`)
+- Latest run failure profile (`2aa45eb9-ab35-4c17-a334-ff1ef4e6c6b3`):
+  - `20` pages with `NETWORK_FILTER_BLOCKED` classification (all-source transport failures with deterministic Meraki `blocked.cgi` redirects)
+  - `1` page with expected `INVALID_PRICING_PAYLOAD` (`https://peptiatlas.com/`)
+- Parse-failure queue snapshot after latest run:
+  - `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`)
+- Metadata-quality checks:
+  - `network_filter_blocked` open rows are metadata-complete (`20/20` with provider/category/location populated)
+  - no open `safe_mode_cloudflare_blocked` rows remain (`0/0`)
+- GitHub Actions security-workflow runtime verification:
+  - blocked in this environment due missing authenticated `gh` session (`gh auth login` required to inspect remote run status/logs).
+  - local dependency vulnerability gate remains clean (`npm audit --audit-level=high` => `0` vulnerabilities).
+- One-time parse-failure dedupe cleanup:
+  - open rows before cleanup: `96`
+  - historical duplicates marked `ignored` with `resolved_by='system_parse_failure_dedupe'`: `71`
+  - open rows after cleanup: `25`
+- Legacy parse-failure cleanup in this pass:
+  - resolved/ignored 4 stale `no_offers_found` rows for remediated/historical targets (`open parse_failure 25 -> 21`).
+- Finnrick sync rerun in this pass:
+  - `npm run job:finnrick` -> `084b323c-6472-4554-b11f-d0aa19f0889c` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
 - Latest vendor onboarding run (`e0a4b0fc-2063-4c38-9ac5-e01d271deaa4`) completed ingestion and then failed guardrails with:
   - `pagesTotal=53`, `pagesSuccess=51`, `pagesFailed=2`
   - `offersCreated=151`, `offersUpdated=0`, `offersUnchanged=1205`
@@ -267,17 +360,17 @@ All notable changes to Stack Tracker are documented in this file.
   - `offersExcludedByRule=325`
   - `unresolvedAliases=0`, `aliasesSkippedByAi=376`, `aiTasksQueued=21`
   - quality guardrails `invariant=pass`, `drift=pass`, `smoke=pass`
-- Latest smoke command verification (`npm run job:smoke-top-compounds`) passes with baseline `425efba4-127e-4792-903d-8113bf45c206` (`failureCount=0`).
+- Historical smoke command verification (`npm run job:smoke-top-compounds`) for baseline `425efba4-127e-4792-903d-8113bf45c206` passed (`failureCount=0`).
 - Latest coverage snapshot:
   - `45` active vendors
   - `53` active vendor pages
 - Alias queue snapshot after manual adjudication and verification:
   - `queue_type='alias_match'`: `open=0`, `in_progress=0`, `resolved=466`, `ignored=432`
-- Parse-failure queue snapshot after latest run:
+- Parse-failure queue snapshot after run `425efba4-127e-4792-903d-8113bf45c206`:
   - `queue_type='parse_failure'`: `open=54` (`invalid_pricing_payload=7`, `no_offers_found=44`, `safe_mode_cloudflare_blocked=3`)
 - Parse-failure payload hygiene audit:
   - Backfilled two legacy open cloudflare-block rows so blocked-site metadata is now complete on all open cloudflare-block entries (`3/3` include provider/status/source).
-- Latest run failing-page signals are explicit:
+- Run `425efba4-127e-4792-903d-8113bf45c206` failing-page signals:
   - `Kits4Less` root page -> `NO_OFFERS` with `DISCOVERY_ATTEMPT_FAILED` (`safe_mode_access_blocked`, provider `cloudflare`, `HTTP 403` challenge)
   - `PeptiAtlas` root page -> `INVALID_PRICING_PAYLOAD` (Woo products with all-zero prices)
 - Storefront remediations verified:

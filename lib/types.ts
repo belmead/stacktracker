@@ -67,7 +67,7 @@ export interface HomeCardRow {
   vendorUrl: string;
   metricPrice: number | null;
   metricType: MetricType;
-  finnrickRating: number | null;
+  finnrickRating: string | null;
 }
 
 export interface HomeCard {

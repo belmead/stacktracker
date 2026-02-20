@@ -14,6 +14,7 @@ const mockMarkVendorPageScrape = vi.fn();
 const mockPruneOperationalNoiseData = vi.fn();
 const mockReconcileStaleScrapeRuns = vi.fn();
 const mockRecordScrapeEvent = vi.fn();
+const mockShouldSuppressNetworkFilterBlockedParseFailure = vi.fn();
 const mockTouchScrapeRunHeartbeat = vi.fn();
 
 const mockCreateAiAgentTask = vi.fn();
@@ -45,6 +46,7 @@ vi.mock("@/lib/db/queries", () => ({
   pruneOperationalNoiseData: mockPruneOperationalNoiseData,
   reconcileStaleScrapeRuns: mockReconcileStaleScrapeRuns,
   recordScrapeEvent: mockRecordScrapeEvent,
+  shouldSuppressNetworkFilterBlockedParseFailure: mockShouldSuppressNetworkFilterBlockedParseFailure,
   touchScrapeRunHeartbeat: mockTouchScrapeRunHeartbeat
 }));
 
@@ -105,6 +107,7 @@ describe("runVendorScrapeJob no-offers diagnostics", () => {
     });
     mockReconcileStaleScrapeRuns.mockResolvedValue([]);
     mockRecordScrapeEvent.mockResolvedValue(undefined);
+    mockShouldSuppressNetworkFilterBlockedParseFailure.mockResolvedValue(false);
     mockTouchScrapeRunHeartbeat.mockResolvedValue(undefined);
 
     mockCreateAiAgentTask.mockResolvedValue("task_1");
@@ -359,6 +362,274 @@ describe("runVendorScrapeJob no-offers diagnostics", () => {
       safeModeBlocked: true,
       safeModeBlockProvider: "imperva",
       cloudflareBlocked: false
+    });
+  });
+
+  it("classifies repeated discovery transport failures as discovery_fetch_failed", async () => {
+    const transportFailureAttempts = [
+      {
+        source: "woocommerce_store_api",
+        success: false,
+        offers: 0,
+        durationMs: 41,
+        error: "fetch failed | getaddrinfo ENOTFOUND example.test"
+      },
+      {
+        source: "shopify_products_api",
+        success: false,
+        offers: 0,
+        durationMs: 39,
+        error: "fetch failed | getaddrinfo ENOTFOUND example.test"
+      },
+      {
+        source: "html",
+        success: false,
+        offers: 0,
+        durationMs: 22,
+        error: "fetch failed | getaddrinfo ENOTFOUND example.test"
+      }
+    ];
+
+    mockDiscoverOffers
+      .mockResolvedValueOnce({
+        offers: [],
+        source: null,
+        origin: null,
+        attempts: transportFailureAttempts,
+        diagnostics: []
+      })
+      .mockResolvedValueOnce({
+        offers: [],
+        source: null,
+        origin: null,
+        attempts: transportFailureAttempts,
+        diagnostics: []
+      });
+
+    const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+    await runVendorScrapeJob({
+      runMode: "manual",
+      scrapeMode: "safe",
+      triggeredBy: "test",
+      vendorId: "vendor_1"
+    });
+
+    expect(mockDiscoverOffers).toHaveBeenCalledTimes(2);
+    expect(mockCreateAiAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "discovery_fetch_failed"
+      })
+    );
+    expect(mockCreateReviewQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reason: "discovery_fetch_failed",
+          discoveryFetchFailed: true,
+          discoveryFetchFailedSources: [
+            "woocommerce_store_api",
+            "shopify_products_api",
+            "html",
+            "woocommerce_store_api",
+            "shopify_products_api",
+            "html"
+          ]
+        })
+      })
+    );
+    expect(mockMarkVendorPageScrape).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "no_data_fetch_failed"
+      })
+    );
+    expect(mockShouldSuppressNetworkFilterBlockedParseFailure).not.toHaveBeenCalled();
+
+    const eventCodes = mockRecordScrapeEvent.mock.calls.map(([payload]) => payload.code);
+    expect(eventCodes).toContain("DISCOVERY_FETCH_FAILED");
+    expect(eventCodes).not.toContain("NO_OFFERS");
+  });
+
+  it("classifies network-filter blocked transport failures with dedicated reason and metadata", async () => {
+    const transportFailureAttempts = [
+      {
+        source: "woocommerce_store_api",
+        success: false,
+        offers: 0,
+        durationMs: 41,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      },
+      {
+        source: "shopify_products_api",
+        success: false,
+        offers: 0,
+        durationMs: 39,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      },
+      {
+        source: "html",
+        success: false,
+        offers: 0,
+        durationMs: 22,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      }
+    ];
+
+    mockDiscoverOffers.mockResolvedValue({
+      offers: [],
+      source: null,
+      origin: null,
+      attempts: transportFailureAttempts,
+      diagnostics: []
+    });
+
+    const fetchProbe = vi.fn(async () => {
+      return new Response("", {
+        status: 302,
+        headers: {
+          location:
+            "http://wired.meraki.com:8090/blocked.cgi?blocked_server=198.251.81.14:80&blocked_url=http%3A%2F%2Faminoasylumllc.com%2F&blocked_categories=bs_047"
+        }
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchProbe);
+    const envRef = process.env as Record<string, string | undefined>;
+    const previousEnv = envRef.NODE_ENV;
+    envRef.NODE_ENV = "development";
+
+    try {
+      const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+      await runVendorScrapeJob({
+        runMode: "manual",
+        scrapeMode: "safe",
+        triggeredBy: "test",
+        vendorId: "vendor_1"
+      });
+    } finally {
+      envRef.NODE_ENV = previousEnv;
+      vi.unstubAllGlobals();
+    }
+
+    expect(mockCreateAiAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "network_filter_blocked"
+      })
+    );
+    expect(mockCreateReviewQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reason: "network_filter_blocked",
+          networkFilterBlocked: true,
+          networkFilterSignature: expect.any(String),
+          networkFilterProvider: "meraki",
+          networkFilterCategory: "bs_047",
+          parseFailureQueueSuppressed: false
+        })
+      })
+    );
+    expect(mockShouldSuppressNetworkFilterBlockedParseFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendorId: "vendor_1",
+        pageUrl: "https://peptiatlas.com/",
+        networkFilterSignature: expect.any(String)
+      })
+    );
+    expect(mockMarkVendorPageScrape).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "no_data_network_filter_blocked"
+      })
+    );
+
+    const eventCodes = mockRecordScrapeEvent.mock.calls.map(([payload]) => payload.code);
+    expect(eventCodes).toContain("NETWORK_FILTER_BLOCKED");
+    const blockedEvent = mockRecordScrapeEvent.mock.calls.find(([payload]) => payload.code === "NETWORK_FILTER_BLOCKED")?.[0];
+    expect(blockedEvent?.payload).toMatchObject({
+      networkFilterBlocked: true,
+      networkFilterSignature: expect.any(String),
+      parseFailureQueueSuppressed: false
+    });
+  });
+
+  it("suppresses repeated identical network-filter parse-failure queue noise while keeping events", async () => {
+    const transportFailureAttempts = [
+      {
+        source: "woocommerce_store_api",
+        success: false,
+        offers: 0,
+        durationMs: 41,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      },
+      {
+        source: "shopify_products_api",
+        success: false,
+        offers: 0,
+        durationMs: 39,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      },
+      {
+        source: "html",
+        success: false,
+        offers: 0,
+        durationMs: 22,
+        error: "fetch failed | read ECONNRESET | code=ECONNRESET"
+      }
+    ];
+
+    mockShouldSuppressNetworkFilterBlockedParseFailure.mockResolvedValueOnce(true);
+    mockDiscoverOffers.mockResolvedValue({
+      offers: [],
+      source: null,
+      origin: null,
+      attempts: transportFailureAttempts,
+      diagnostics: []
+    });
+
+    const fetchProbe = vi.fn(async () => {
+      return new Response("", {
+        status: 302,
+        headers: {
+          location:
+            "http://wired.meraki.com:8090/blocked.cgi?blocked_server=198.251.81.14:80&blocked_url=http%3A%2F%2Faminoasylumllc.com%2F&blocked_categories=bs_047"
+        }
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchProbe);
+    const envRef = process.env as Record<string, string | undefined>;
+    const previousEnv = envRef.NODE_ENV;
+    envRef.NODE_ENV = "development";
+
+    try {
+      const { runVendorScrapeJob } = await import("@/lib/scraping/worker");
+      await runVendorScrapeJob({
+        runMode: "manual",
+        scrapeMode: "safe",
+        triggeredBy: "test",
+        vendorId: "vendor_1"
+      });
+    } finally {
+      envRef.NODE_ENV = previousEnv;
+      vi.unstubAllGlobals();
+    }
+
+    expect(mockShouldSuppressNetworkFilterBlockedParseFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendorId: "vendor_1",
+        pageUrl: "https://peptiatlas.com/",
+        networkFilterSignature: expect.any(String)
+      })
+    );
+    expect(mockCreateReviewQueueItem).not.toHaveBeenCalled();
+    expect(mockMarkVendorPageScrape).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "no_data_network_filter_blocked"
+      })
+    );
+
+    const blockedEvent = mockRecordScrapeEvent.mock.calls.find(([payload]) => payload.code === "NETWORK_FILTER_BLOCKED")?.[0];
+    expect(blockedEvent?.payload).toMatchObject({
+      networkFilterBlocked: true,
+      networkFilterSignature: expect.any(String),
+      parseFailureQueueSuppressed: true
     });
   });
 
