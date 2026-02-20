@@ -63,7 +63,9 @@ Primary docs:
   - Least-privilege runtime credential guard: optional `DATABASE_RUNTIME_USER` assertion + `DATABASE_ADMIN_URL` script split.
   - Dependency baseline patched for CVEs: `next`/`eslint-config-next` upgraded to `15.5.12`; `npm audit --audit-level=high` currently clean (`0` vulnerabilities).
 - Security CI remote validation note:
-  - `gh` auth is now configured locally, but remote `belmead/stacktracker` currently has no workflow files/runs in GitHub Actions, so `Security CI` run/log validation remains blocked until workflow files are pushed.
+  - Workflow run `22237905231` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
+  - `Secret Scan (gitleaks)`: pass.
+  - `Dependency Vulnerability Gate`: fail (`npm audit --audit-level=high`) due current `ajv`/`minimatch` advisories in ESLint-related dependency chains (`20` vulnerabilities total: `1 moderate`, `19 high`).
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
   - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.

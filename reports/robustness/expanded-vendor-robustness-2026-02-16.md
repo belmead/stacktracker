@@ -54,7 +54,9 @@
 
 ### Security CI runtime validation status
 - `gh` auth is valid (`repo` + `workflow` scopes).
-- Remote run/log verification is performed after branch push (see latest handoff status for current run IDs).
+- Branch push triggered `Security CI` run `22237905231`.
+- `Secret Scan (gitleaks)`: pass.
+- `Dependency Vulnerability Gate`: fail at `npm audit --audit-level=high` (`20` vulnerabilities: `1` moderate, `19` high; `ajv`/`minimatch` advisories via ESLint-related dependency chains).
 
 ## Continuation Snapshot (2026-02-17, rerun + legacy queue cleanup + Finnrick sync)
 ### Robustness cycle

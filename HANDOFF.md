@@ -47,6 +47,12 @@
   - Re-ran Finnrick sync: `28ce6525-14ce-4cfc-b043-83f9440944ea` (`status=success`).
   - Parser/UI now surface Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) instead of numeric display.
   - Latest-per-vendor label audit: `numeric-like labels = 0`.
+- Security CI remote validation (post-push):
+  - Branch pushed to GitHub (`codex/mvp-scaffold`, commit `cf5686f4c1c7e6dc187e9f583494d581aaef64bb`).
+  - Workflow run: `22237905231` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22237905231)).
+  - `Secret Scan (gitleaks)`: pass.
+  - `Dependency Vulnerability Gate`: fail at `npm audit --audit-level=high` with `20` vulnerabilities (`1 moderate`, `19 high`) rooted in `ajv`/`minimatch` via ESLint-related dependency chains.
+  - Local re-check now matches remote failure (`npm audit --audit-level=high` exits non-zero with the same advisories).
 
 ## Continuation Update (2026-02-20, hybrid network-filter queue suppression + robustness rerun)
 - Deterministic `network_filter_blocked` queue-noise suppression policy shipped:

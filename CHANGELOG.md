@@ -300,6 +300,10 @@ All notable changes to Stack Tracker are documented in this file.
 - Finnrick rerun + label audit:
   - `npm run job:finnrick` -> `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`)
   - latest-per-vendor Finnrick labels now contain `0` numeric-style values (`x/5`), confirming range-label migration.
+- Security CI remote validation (post-push):
+  - run `22237905231` on `codex/mvp-scaffold`;
+  - `Secret Scan (gitleaks)` passed;
+  - `Dependency Vulnerability Gate` failed on `npm audit --audit-level=high` (`20` vulnerabilities: `1` moderate, `19` high; `ajv`/`minimatch` advisories via ESLint-related chains).
 - Latest robustness cycle completed with:
   - `npm run typecheck` pass
   - `npm run lint` pass
