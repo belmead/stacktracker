@@ -48,8 +48,8 @@
   - Parser/UI now surface Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) instead of numeric display.
   - Latest-per-vendor label audit: `numeric-like labels = 0`.
 - Security CI remote validation (post-push):
-  - Branch pushed to GitHub (`codex/mvp-scaffold`, commit `cf5686f4c1c7e6dc187e9f583494d581aaef64bb`).
-  - Workflow run: `22237905231` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22237905231)).
+  - Branch pushed to GitHub (`codex/mvp-scaffold`, commit `1ca90abeb1a2c2b2a3442291aa1d6fb36da44b87`).
+  - Workflow run: `22238026251` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238026251)).
   - `Secret Scan (gitleaks)`: pass.
   - `Dependency Vulnerability Gate`: fail at `npm audit --audit-level=high` with `20` vulnerabilities (`1 moderate`, `19 high`) rooted in `ajv`/`minimatch` via ESLint-related dependency chains.
   - Local re-check now matches remote failure (`npm audit --audit-level=high` exits non-zero with the same advisories).

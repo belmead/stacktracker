@@ -298,7 +298,7 @@ Internal jobs:
 - Latest Finnrick run: `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
 - Finnrick rating presentation now uses textual `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end in parsing, storage selection, and UI rendering.
 - Security CI runtime validation caveat:
-  - Remote run validated: `Security CI` run `22237905231` on `codex/mvp-scaffold`.
+  - Remote run validated: `Security CI` run `22238026251` on `codex/mvp-scaffold`.
   - `Secret Scan (gitleaks)` passed.
   - `Dependency Vulnerability Gate` failed at `npm audit --audit-level=high` (`20` vulnerabilities: `1` moderate, `19` high; advisories rooted in `ajv`/`minimatch` via ESLint-related chains).
 - Coverage expansion batches are onboarded in seed data:

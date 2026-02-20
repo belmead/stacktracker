@@ -46,8 +46,8 @@ Current verified state:
    - ratings now use Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end
    - latest-per-vendor numeric-style labels (`x/5`): `0`
 10. Security CI remote validation:
-   - branch `codex/mvp-scaffold` pushed (commit `cf5686f4c1c7e6dc187e9f583494d581aaef64bb`)
-   - workflow run `22237905231` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22237905231))
+   - branch `codex/mvp-scaffold` pushed (commit `1ca90abeb1a2c2b2a3442291aa1d6fb36da44b87`)
+   - workflow run `22238026251` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238026251))
    - `Secret Scan (gitleaks)`: pass
    - `Dependency Vulnerability Gate`: fail at `npm audit --audit-level=high`
    - failing advisories include `minimatch <10.2.1` (high) and `ajv <8.18.0` (moderate) through ESLint-related dependency chains
