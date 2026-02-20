@@ -277,11 +277,12 @@ Internal jobs:
   - `npm run typecheck` pass
   - `npm run lint` pass
   - `npm run test` pass (`80` tests)
-  - `npm audit --audit-level=high` pass (`0` vulnerabilities)
+  - `npm audit --audit-level=high` pass (`high=0`, `critical=0`; current `moderate=9`)
   - `npm run job:vendors` run `89043ac0-e797-49c2-9755-7f928a203c6a` completed (`status=partial`) with guardrails `invariant=pass`, `drift=pass`, `smoke=pass`.
   - `npm run job:review-ai -- --limit=50` pass (`itemsScanned=0`, `leftOpen=0`).
   - `npm run job:smoke-top-compounds` pass (`failureCount=0`, baseline `89043ac0-e797-49c2-9755-7f928a203c6a`).
   - Live suppression-validation run `c1f47324-133c-4ff5-826f-a98f82392fa4` (vendor-scoped) confirmed event visibility + queue suppression (`parseFailureQueueSuppressed=true`) for deterministic blocked signatures.
+  - Security dependency remediation (`47fe6997ac03d1edb23914d8a4a04c60377908d1`): upgraded `vitest`/`@vitest/coverage-v8` to `4.0.18` and pinned `minimatch` via npm override (`^10.2.2`) to remove high-severity audit advisories.
 - Current queue and coverage snapshot:
   - Alias queue (`queue_type='alias_match'`): `open=0`, `resolved=466`, `ignored=432`.
   - Parse-failure queue (`queue_type='parse_failure'`): `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`).
@@ -297,10 +298,11 @@ Internal jobs:
 - Measured review-ai throughput baseline (`~0.72s/item`, `82.86 items/min`) is faster than the planning budget target (`~1.5s/item`) without code changes.
 - Latest Finnrick run: `28ce6525-14ce-4cfc-b043-83f9440944ea` (`vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`).
 - Finnrick rating presentation now uses textual `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end in parsing, storage selection, and UI rendering.
-- Security CI runtime validation caveat:
-  - Remote run validated: `Security CI` run `22238026251` on `codex/mvp-scaffold`.
+- Security CI runtime validation:
+  - Remote run validated: `Security CI` run `22238481016` on `codex/mvp-scaffold`.
   - `Secret Scan (gitleaks)` passed.
-  - `Dependency Vulnerability Gate` failed at `npm audit --audit-level=high` (`20` vulnerabilities: `1` moderate, `19` high; advisories rooted in `ajv`/`minimatch` via ESLint-related chains).
+  - `Dependency Vulnerability Gate` passed (`npm audit --audit-level=high`).
+  - Current audit profile is moderate-only (`9` moderate advisories in ESLint/AJV chains; no high/critical findings).
 - Coverage expansion batches are onboarded in seed data:
   - Batch 1 added 10 vetted storefront/API vendors (`3/10` -> `13/21` vendors/pages).
   - Batch 2 added 5 vetted storefront/API vendors (`13/21` -> `18/26` vendors/pages).

@@ -20,7 +20,7 @@ Current verified state:
    - `open=21`
    - `network_filter_blocked=20`
    - `invalid_pricing_payload=1` (`https://peptiatlas.com/`)
-   - `discovery_fetch_failed=0` (previous elite outlier reclassified/triaged)
+   - `discovery_fetch_failed=0`
 4. Latest full vendor run:
    - `89043ac0-e797-49c2-9755-7f928a203c6a` (`status=partial`)
    - `pagesTotal=53`, `pagesSuccess=31`, `pagesFailed=22`
@@ -32,42 +32,39 @@ Current verified state:
    - `c1f47324-133c-4ff5-826f-a98f82392fa4` (`vendor-scoped`, `status=partial`)
    - deterministic blocked event kept visibility and set `parseFailureQueueSuppressed=true`
    - no replacement open parse-failure row created for `https://aminoasylumllc.com/`
-6. Event profile for latest full vendor run (`89043ac0-e797-49c2-9755-7f928a203c6a`):
-   - `NETWORK_FILTER_BLOCKED=21`
-   - `DISCOVERY_ATTEMPT_FAILED=126`
-   - `INVALID_PRICING_PAYLOAD=1`
-7. Latest smoke baseline:
+6. Latest smoke baseline:
    - `89043ac0-e797-49c2-9755-7f928a203c6a` (`job:smoke-top-compounds` passed)
-8. `thymosin-alpha-1` coverage:
+7. `thymosin-alpha-1` coverage:
    - `27` vendors / `28` active offers
-9. Latest Finnrick run:
+8. Latest Finnrick run:
    - `28ce6525-14ce-4cfc-b043-83f9440944ea` (`status=success`)
    - `vendorsTotal=45`, `vendorsMatched=28`, `ratingsUpdated=28`, `notFound=17`
-   - ratings now use Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end
-   - latest-per-vendor numeric-style labels (`x/5`): `0`
+   - ratings use Finnrick `Ratings range` labels (`A`, `A to C`, `N/A`) end-to-end
+9. Security dependency remediation (completed):
+   - commit `47fe6997ac03d1edb23914d8a4a04c60377908d1`
+   - updated `vitest` + `@vitest/coverage-v8` to `4.0.18`
+   - added npm override `minimatch: ^10.2.2`
+   - runtime ingestion code unchanged
 10. Security CI remote validation:
-   - branch `codex/mvp-scaffold` pushed (commit `1ca90abeb1a2c2b2a3442291aa1d6fb36da44b87`)
-   - workflow run `22238026251` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238026251))
-   - `Secret Scan (gitleaks)`: pass
-   - `Dependency Vulnerability Gate`: fail at `npm audit --audit-level=high`
-   - failing advisories include `minimatch <10.2.1` (high) and `ajv <8.18.0` (moderate) through ESLint-related dependency chains
-   - local `npm audit --audit-level=high` now reproduces same failure (`20` vulnerabilities: `1` moderate, `19` high)
+    - workflow run `22238481016` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238481016))
+    - `Secret Scan (gitleaks)`: pass
+    - `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`)
+    - current audit profile: `0` high/critical, `9` moderate (ESLint/AJV chain)
+11. Local verification after remediation:
+    - `npm run typecheck`: pass
+    - `npm run lint`: pass
+    - `npm run test`: pass (`80` tests)
+    - `npm audit --audit-level=high`: pass
 
 Primary tasks for next chat:
-1. Remediate Security CI vulnerability-gate failure (`npm audit --audit-level=high`) with the smallest safe dependency strategy.
-2. Re-run local verification after remediation:
-   - `npm run typecheck`
-   - `npm run lint`
-   - `npm run test`
-   - `npm audit --audit-level=high`
-3. Push remediation commit(s) and re-check GitHub Actions Security CI run status/logs (`gitleaks` + vulnerability gate).
-4. Preserve smoke hydration and parse-failure dedupe/suppression behavior while addressing security dependencies.
-5. Re-run robustness cycle if dependency changes may affect runtime behavior:
+1. Decide whether to keep the current moderate-only advisory baseline or pursue a deeper lint-stack migration (for example ESLint CLI/Next 16 track) to reduce moderate advisories.
+2. If any runtime dependency or scraper/runtime code changes are introduced, run the robustness cycle:
    - `npm run job:vendors`
    - `npm run job:review-ai -- --limit=50`
    - `npm run job:smoke-top-compounds`
-6. Do not rerun Finnrick unless onboarding scope changes or explicitly requested.
-7. Update docs after completion:
+3. Preserve smoke hydration and parse-failure dedupe/suppression behavior.
+4. Do not rerun Finnrick unless onboarding scope changes or explicitly requested.
+5. Update docs after any additional changes:
    - `/Users/belmead/Documents/stacktracker/reports/robustness/expanded-vendor-robustness-2026-02-16.md`
    - `/Users/belmead/Documents/stacktracker/HANDOFF.md`
    - `/Users/belmead/Documents/stacktracker/README.md`

@@ -16,8 +16,27 @@
 - Parse-failure queue (`queue_type='parse_failure'`): `open=21` (`network_filter_blocked=20`, `invalid_pricing_payload=1`).
 - `discovery_fetch_failed` open rows: `0` (prior `elitepeptides.com` row reclassified/triaged).
 - Current seeded coverage: `45` active vendors / `53` active vendor pages.
-- Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:vendors`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`.
+- Quality checks currently passing in this pass: `npm run typecheck`, `npm run lint`, `npm run test`, `npm run job:vendors`, `npm run job:review-ai -- --limit=50`, `npm run job:smoke-top-compounds`, `npm audit --audit-level=high`.
 - Operational note: security workflow runtime verification now depends on remote push/run availability.
+
+## Continuation Update (2026-02-20, security dependency remediation + Security CI pass)
+- Security dependency strategy applied (smallest safe scope):
+  - Upgraded dev test tooling: `vitest` -> `^4.0.18`, `@vitest/coverage-v8` -> `^4.0.18`.
+  - Added npm override: `minimatch` -> `^10.2.2` to remove high-severity `minimatch <10.2.1` advisories in lint/test dependency chains.
+  - Preserved runtime app/scraper stack and lint workflow compatibility (`next` remains `15.5.12`, `eslint-config-next` remains `15.5.12`, `next lint` still in use).
+- Local verification after remediation:
+  - `npm run typecheck` -> pass
+  - `npm run lint` -> pass
+  - `npm run test` -> pass (`80` tests)
+  - `npm audit --audit-level=high` -> pass (`high=0`, `critical=0`, remaining `moderate=9`)
+- Robustness-cycle decision:
+  - Skipped `job:vendors` / `job:review-ai` / `job:smoke-top-compounds` rerun in this pass because changes are dev-tooling/transitive dependency only (no runtime ingestion code, parser logic, or job-path changes).
+- Security CI remote validation (post-push):
+  - Branch pushed to GitHub (`codex/mvp-scaffold`, commit `47fe6997ac03d1edb23914d8a4a04c60377908d1`).
+  - Workflow run: `22238481016` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238481016)).
+  - `Secret Scan (gitleaks)`: pass.
+  - `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`).
+  - Job logs now report only moderate advisories in ESLint/AJV chains (`9` moderate), with no high/critical findings.
 
 ## Continuation Update (2026-02-20, robustness rerun + live suppression validation + Finnrick ratings range)
 - Robustness cycle executed:

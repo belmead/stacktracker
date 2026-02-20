@@ -279,8 +279,19 @@ All notable changes to Stack Tracker are documented in this file.
   - `DATABASE_ADMIN_URL` split credential path for bootstrap/import scripts.
 - Dependency baseline patched for known Next.js CVEs:
   - upgraded `next` and `eslint-config-next` from `15.1.6` to `15.5.12`.
+- Security vulnerability-gate remediation (2026-02-20):
+  - upgraded `vitest` and `@vitest/coverage-v8` to `4.0.18`;
+  - added npm override `minimatch: ^10.2.2` to clear high-severity transitive `minimatch` advisories in lint/test dependency chains;
+  - retained `next`/runtime ingestion dependencies unchanged.
 
 ### Verified
+- Security CI remediation validation completed:
+  - local verification passed: `npm run typecheck`, `npm run lint`, `npm run test`, `npm audit --audit-level=high`.
+  - commit `47fe6997ac03d1edb23914d8a4a04c60377908d1` pushed to `codex/mvp-scaffold`.
+  - `Security CI` run `22238481016` passed both jobs:
+    - `Secret Scan (gitleaks)` pass
+    - `Dependency Vulnerability Gate` pass (`high=0`, `critical=0`; log shows `9` moderate advisories)
+- Robustness-cycle rerun was intentionally skipped in this pass because remediation touched only dev-toolchain/transitive dependencies (no runtime scraper/job code changes).
 - Latest robustness cycle completed with:
   - `npm run typecheck` pass
   - `npm run lint` pass

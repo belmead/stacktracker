@@ -1,5 +1,29 @@
 # Expanded Vendor Robustness Report (2026-02-16)
 
+## Continuation Snapshot (2026-02-20, security dependency remediation + Security CI pass)
+### Security dependency update
+- Applied smallest safe dependency strategy for the vulnerability gate:
+  - upgraded `vitest` to `^4.0.18`;
+  - upgraded `@vitest/coverage-v8` to `^4.0.18`;
+  - added npm override `minimatch: ^10.2.2` to eliminate high-severity transitive `minimatch` advisories.
+- Runtime ingestion/app dependencies and behavior remain unchanged (`next`/scraper stack unchanged).
+
+### Verification cycle (post-remediation)
+- `npm run typecheck`: pass
+- `npm run lint`: pass
+- `npm run test`: pass (`80` tests)
+- `npm audit --audit-level=high`: pass (`high=0`, `critical=0`, `moderate=9`)
+
+### Security CI runtime validation status
+- Branch push commit: `47fe6997ac03d1edb23914d8a4a04c60377908d1`.
+- Workflow run: `22238481016` ([Security CI](https://github.com/belmead/stacktracker/actions/runs/22238481016)).
+- `Secret Scan (gitleaks)`: pass.
+- `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`).
+- Gate log now reports only moderate advisories in ESLint/AJV chains (`9` moderate), with no high/critical findings.
+
+### Robustness-cycle rerun decision
+- Skipped `job:vendors`, `job:review-ai -- --limit=50`, and `job:smoke-top-compounds` in this pass because remediation touched only dev-toolchain/transitive dependencies (no runtime scraping/job logic changes).
+
 ## Continuation Snapshot (2026-02-20, robustness rerun + live suppression validation + Finnrick ratings range)
 ### Code/policy update
 - Deterministic `network_filter_blocked` queue handling uses hybrid suppression:

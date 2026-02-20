@@ -61,11 +61,12 @@ Primary docs:
   - CI secret scanning + vulnerability gating: `.github/workflows/security-ci.yml`.
   - Event/review payload redaction before DB persistence: `lib/security/redaction.ts`.
   - Least-privilege runtime credential guard: optional `DATABASE_RUNTIME_USER` assertion + `DATABASE_ADMIN_URL` script split.
-  - Dependency baseline patched for CVEs: `next`/`eslint-config-next` upgraded to `15.5.12`; `npm audit --audit-level=high` currently clean (`0` vulnerabilities).
+  - Security dependency remediation (2026-02-20): upgraded `vitest`/`@vitest/coverage-v8` to `4.0.18` and pinned `minimatch` via npm overrides (`^10.2.2`) to clear high-severity advisories in dev dependency chains.
 - Security CI remote validation note:
-  - Workflow run `22238026251` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
+  - Workflow run `22238481016` on branch `codex/mvp-scaffold` is now validated in GitHub Actions.
   - `Secret Scan (gitleaks)`: pass.
-  - `Dependency Vulnerability Gate`: fail (`npm audit --audit-level=high`) due current `ajv`/`minimatch` advisories in ESLint-related dependency chains (`20` vulnerabilities total: `1 moderate`, `19 high`).
+  - `Dependency Vulnerability Gate`: pass (`npm audit --audit-level=high`).
+  - Current audit profile: `0` high/critical, `9` moderate advisories (ESLint/AJV chain).
 - Storefront-target remediations completed:
   - `Alpha G Research` now targets `https://www.alphagresearch.com/shop-1` and is successful.
   - `Dragon Pharma Store` now targets `https://dragonpharmastore.com/64-peptides` with PrestaShop extraction support and is successful.
@@ -279,10 +280,12 @@ Status in this pass:
 - CI secret scanning and vulnerability gating are now implemented in `.github/workflows/security-ci.yml`:
   - `gitleaks` scans full git history.
   - `npm audit --audit-level=high` gates high/critical CVEs.
-- GitHub Actions runtime verification note:
-  - validating the latest remote workflow runs requires authenticated `gh` CLI access (`gh auth login`).
-  - local environment in this pass was unauthenticated, so remote run-status confirmation was blocked.
-- Dependency CVE baseline was remediated by upgrading `next` and `eslint-config-next` to `15.5.12` (`npm audit` currently reports `0` vulnerabilities).
+- GitHub Actions runtime verification:
+  - run `22238481016` completed successfully on `codex/mvp-scaffold`.
+  - `Secret Scan (gitleaks)` and `Dependency Vulnerability Gate` both passed.
+- Current dependency-vulnerability status:
+  - `npm audit --audit-level=high` passes (no high/critical vulnerabilities).
+  - `npm audit` currently reports `9` moderate advisories (ESLint/AJV chain), with no high/critical findings.
 - Runtime log/event redaction is now enforced before persistence for scrape events and review queue payloads:
   - redaction utility: `lib/security/redaction.ts`
   - call sites: `recordScrapeEvent`, `createReviewQueueItem`
